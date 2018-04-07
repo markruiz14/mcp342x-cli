@@ -4,10 +4,12 @@
 #include <inttypes.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 
-#define ADC_ADDR 0x68
+#define ADC_ADDR 	0x68
+#define I2C_DEVICE 	"/dev/i2c-1"
 
 void printbincharpad(char c)
 {
@@ -24,7 +26,7 @@ int main()
 	int smbus_fp;
 
 	// Open the i2c bus
-	if((smbus_fp = open("/dev/i2c-1", O_RDWR)) < 0)
+	if((smbus_fp = open(I2C_DEVICE, O_RDWR)) < 0)
 	{
 		perror("Could not open i2c bus host controller");
 		exit(1);
