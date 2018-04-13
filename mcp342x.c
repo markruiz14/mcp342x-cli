@@ -2,14 +2,22 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <inttypes.h>
-#include <sys/ioctl.h>
 #include <fcntl.h>
+
+#include <sys/ioctl.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 
-#define ADC_ADDR 	0x68
-#define I2C_DEVICE 	"/dev/i2c-1"
+#define CONFIG_SIZE		3
+#define ADC_ADDR 		0x68
+#define I2C_DEVICE 		"/dev/i2c-1"
+
+#define CONFIG_MASK_READY 		0x80
+#define CONFIG_MASK_CHANNEL		0x60
+#define CONFIG_MASK_CONV_MODE	0x10
+#define CONFIG_MASK_SPS			0x0C
+#define CONFIG_MASK_GAIN		0x03
 
 void printbincharpad(char c)
 {
@@ -21,46 +29,100 @@ void printbincharpad(char c)
 	putchar('\n');
 }
 
-int main()
+int main(int argc, char **argv)
 {
-	int smbus_fp;
+	int i2cfd;
 
-	// Open the i2c bus
-	if((smbus_fp = open(I2C_DEVICE, O_RDWR)) < 0)
-	{
-		perror("Could not open i2c bus host controller");
-		exit(1);
+	/* Open i2c device */
+	if((i2cfd = open(I2C_DEVICE, O_RDWR)) < 0) {
+		perror("Could not open i2c device");
+		exit(EXIT_FAILURE);
 	}
 
-	// Connect to the adc
-	if(ioctl(smbus_fp, I2C_SLAVE, ADC_ADDR) < 0)
-	{
+	/* Connect to the i2c device */ 
+	if(ioctl(i2cfd, I2C_SLAVE, ADC_ADDR) < 0) {
 		perror("Could not connect to ADC on i2c bus");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}	
 
-	// Read 3 bytes for 12bit configuration
-	char buf[3];
+	unsigned long funcs;
+	if(ioctl(i2cfd, I2C_FUNCS, &funcs) < 0) {
+		perror("Failed to get i2c device functionality");
+		exit(EXIT_FAILURE);
+	}
 
-	if(read(smbus_fp, buf, 3) != 3)
-	{
-		perror("Could not read bytes from ADC");
+	char data[CONFIG_SIZE];
+	int n;
+
+	/* Read the chip's data (3 bytes) */
+	if((n = read(i2cfd, data, sizeof(data))) < 0) {
+		perror("Could not read data from ADC");
+		exit(EXIT_FAILURE);
 	}
-	else
-	{
-		printbincharpad(buf[0]);
-		printbincharpad(buf[1]);
-		printbincharpad(buf[2]);
+	else {
+		for(int i = 0; i < CONFIG_SIZE; i++)
+			printbincharpad(data[i]);	
 	}
+
+	char config = data[2];
+	
+	/* ADC data ready? */
+	char *rdystr = (config & CONFIG_MASK_READY) ? "Yes" : "No";
+
+	/* Selected channel? */
+	char chan = config & CONFIG_MASK_CHANNEL;
+	
+	/* Conversion mode? */
+	char *convstr = (config & CONFIG_MASK_CONV_MODE) ? "Continuous" : "One-Shot";
+
+	/* Sample rate? */
+	char *spsstr;
+	switch(config & CONFIG_MASK_SPS) {
+		case 0:
+			spsstr = "240 samples/sec";
+			break;
+		case 1:
+			spsstr = "60 samples/sec";
+			break;
+		case 2:
+			spsstr = "15 samples/sec";
+			break;
+		case 3:
+			spsstr = "3.75 samples/sec";
+			break;
+	}
+
+	/* Gain? */
+	char *gainstr;
+	switch(config & CONFIG_MASK_GAIN) {
+		case 0:
+			gainstr = "x1";
+			break;
+		case 1:
+			gainstr = "x2";
+			break;
+		case 2:
+			gainstr = "x4";
+			break;
+		case 3:
+			gainstr = "x8";
+			break;
+	}
+	
+	printf("Ready: %s\n", rdystr);
+	printf("Channel: %i\n", chan + 1);
+	printf("Conversion mode: %s\n", convstr);
+	printf("Sample rate: %s\n", spsstr);
+	printf("Gain: %s\n", gainstr);
 
 	double lsb = 0.001;
 	int pga = 1;
 
-	uint16_t outputCode = (buf[0] << 8 ) | buf[1];
+	uint16_t outputCode = (data[0] << 8 ) | data[1];
 	printf("outputCode: %i\n", outputCode);
 	
 	double value = outputCode * (lsb/pga);
 	printf("value: %f\n", value);
 
-	close(smbus_fp);
+	close(i2cfd);
 }
