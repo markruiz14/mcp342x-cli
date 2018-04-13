@@ -19,7 +19,7 @@
 #define CONFIG_MASK_SPS			0x0C
 #define CONFIG_MASK_GAIN		0x03
 
-void printbincharpad(char c)
+void printbincharpad(uint8_t c)
 {
 	for (int i = 7; i >= 0; --i)
 	{
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	char data[CONFIG_SIZE];
+	uint8_t data[CONFIG_SIZE];
 	int n;
 
 	/* Read the chip's data (3 bytes) */
@@ -64,19 +64,19 @@ int main(int argc, char **argv)
 			printbincharpad(data[i]);	
 	}
 
-	char config = data[2];
+	uint8_t config = data[2];
 	
 	/* ADC data ready? */
-	char *rdystr = (config & CONFIG_MASK_READY) ? "Yes" : "No";
+	uint8_t *rdystr = (config & CONFIG_MASK_READY) ? "Yes" : "No";
 
 	/* Selected channel? */
-	char chan = config & CONFIG_MASK_CHANNEL;
+	uint8_t chan = config & CONFIG_MASK_CHANNEL;
 	
 	/* Conversion mode? */
-	char *convstr = (config & CONFIG_MASK_CONV_MODE) ? "Continuous" : "One-Shot";
+	uint8_t *convstr = (config & CONFIG_MASK_CONV_MODE) ? "Continuous" : "One-Shot";
 
 	/* Sample rate? */
-	char *spsstr;
+	uint8_t *spsstr;
 	switch(config & CONFIG_MASK_SPS) {
 		case 0:
 			spsstr = "240 samples/sec";
