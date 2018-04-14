@@ -19,8 +19,6 @@
 #define CONFIG_MASK_SPS			0x0C
 #define CONFIG_MASK_GAIN		0x03
 
-#define WRITE_CONFIG 			0	
-
 void printbincharpad(uint8_t c)
 {
 	for (int i = 7; i >= 0; --i)
@@ -49,7 +47,7 @@ int main(int argc, char **argv)
 
 	int n;
 
-#if WRITE_CONFIG == 1
+#if 0 
 	uint8_t cfgbits = 0b00010000;
 	if((n = write(i2cfd, &cfgbits, sizeof(cfgbits))) < 0) {
 		perror("Failed writing configuration bits");
@@ -85,8 +83,8 @@ int main(int argc, char **argv)
 	uint8_t *rdystr = (config & CONFIG_MASK_READY) ? "Yes" : "No";
 
 	/* Selected channel? */
-	uint8_t chan = config & CONFIG_MASK_CHANNEL;
-	
+	uint8_t chan = (config & CONFIG_MASK_CHANNEL) >> 5;
+		
 	/* Conversion mode? */
 	uint8_t *convstr = (config & CONFIG_MASK_CONV_MODE) ? "Continuous" : "One-shot";
 
@@ -94,20 +92,20 @@ int main(int argc, char **argv)
 	uint8_t *spsstr;
 	double lsb;
 	int pga;
-	switch(config & CONFIG_MASK_SPS) {
+	switch((config & CONFIG_MASK_SPS) >> 2) {
 		case 0:
 			spsstr = "240 samples/sec (12 bits)";
 			lsb = 0.001;
 			break;
-		case 4:
+		case 1:
 			spsstr = "60 samples/sec (14 bits)";
 			lsb = 0.00025;
 			break;
-		case 8:
+		case 2:
 			spsstr = "15 samples/sec (16 bits)";
 			lsb = 0.0000625;
 			break;
-		case 12:
+		case 3:
 			spsstr = "3.75 samples/sec (18 bits)";
 			lsb = 0.000015625;
 			break;
