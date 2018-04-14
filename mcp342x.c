@@ -9,7 +9,7 @@
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 
-#define CONFIG_SIZE		4
+#define CONFIG_SIZE		5				
 #define ADC_ADDR 		0x68
 #define I2C_DEVICE 		"/dev/i2c-1"
 
@@ -18,6 +18,8 @@
 #define CONFIG_MASK_CONV_MODE	0x10
 #define CONFIG_MASK_SPS			0x0C
 #define CONFIG_MASK_GAIN		0x03
+
+#define WRITE_CONFIG 			0	
 
 void printbincharpad(uint8_t c)
 {
@@ -45,16 +47,19 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}	
 
-	unsigned long funcs;
-	if(ioctl(i2cfd, I2C_FUNCS, &funcs) < 0) {
-		perror("Failed to get i2c device functionality");
-		exit(EXIT_FAILURE);
-	}
-
-	uint8_t data[CONFIG_SIZE];
 	int n;
 
-	/* Read the chip's data (3 bytes) */
+#if WRITE_CONFIG == 1
+	uint8_t cfgbits = 0b00010000;
+	if((n = write(i2cfd, &cfgbits, sizeof(cfgbits))) < 0) {
+		perror("Failed writing configuration bits");
+		exit(EXIT_FAILURE);
+	}
+#endif
+
+	uint8_t data[CONFIG_SIZE];
+
+	/* Read the chip's data */
 	if((n = read(i2cfd, data, sizeof(data))) < 0) {
 		perror("Could not read data from ADC");
 		exit(EXIT_FAILURE);
@@ -62,10 +67,20 @@ int main(int argc, char **argv)
 	else {
 		for(int i = 0; i < CONFIG_SIZE; i++)
 			printbincharpad(data[i]);	
+		printf("\n");
 	}
 
-	uint8_t config = data[2];
-	
+	/* Find the config byte */
+	uint8_t config;
+	int bytepos = CONFIG_SIZE - 1;
+	while(bytepos >= 3) {
+		if(((1 << 7) | data[bytepos -1])  == data[bytepos]) {
+			config = data[bytepos - 1];
+			break;
+		}
+		bytepos--;
+	}
+
 	/* ADC data ready? */
 	uint8_t *rdystr = (config & CONFIG_MASK_READY) ? "Yes" : "No";
 
@@ -77,18 +92,24 @@ int main(int argc, char **argv)
 
 	/* Sample rate? */
 	uint8_t *spsstr;
+	double lsb;
+	int pga;
 	switch(config & CONFIG_MASK_SPS) {
 		case 0:
 			spsstr = "240 samples/sec (12 bits)";
+			lsb = 0.001;
 			break;
-		case 1:
+		case 4:
 			spsstr = "60 samples/sec (14 bits)";
+			lsb = 0.00025;
 			break;
-		case 2:
+		case 8:
 			spsstr = "15 samples/sec (16 bits)";
+			lsb = 0.0000625;
 			break;
-		case 3:
+		case 12:
 			spsstr = "3.75 samples/sec (18 bits)";
+			lsb = 0.000015625;
 			break;
 	}
 
@@ -97,15 +118,19 @@ int main(int argc, char **argv)
 	switch(config & CONFIG_MASK_GAIN) {
 		case 0:
 			gainstr = "x1";
+			pga = 1;
 			break;
 		case 1:
 			gainstr = "x2";
+			pga = 2;
 			break;
 		case 2:
 			gainstr = "x4";
+			pga = 4;
 			break;
 		case 3:
 			gainstr = "x8";
+			pga = 8;
 			break;
 	}
 	
@@ -115,13 +140,17 @@ int main(int argc, char **argv)
 	printf("Sample rate: %s\n", spsstr);
 	printf("Gain: %s\n", gainstr);
 
-	double lsb = 0.001;
-	int pga = 1;
+	uint32_t outputcode;
+	if((config & CONFIG_MASK_SPS) == 12) {
+		outputcode = (data[0] << 16) | (data[1] << 8) | data[2];
+	} 
+	else {
+		outputcode = (data[0] << 8) | data[1];
+	}
 
-	uint16_t outputCode = (data[0] << 8 ) | data[1];
-	printf("outputCode: %i\n", outputCode);
-	
-	double value = outputCode * (lsb/pga);
+	printf("outputcode: %i\n", outputcode);
+			
+	double value = outputcode * (lsb/pga);
 	printf("value: %f\n", value);
 
 	close(i2cfd);
