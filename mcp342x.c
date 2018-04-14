@@ -9,7 +9,7 @@
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 
-#define CONFIG_SIZE		3
+#define CONFIG_SIZE		4
 #define ADC_ADDR 		0x68
 #define I2C_DEVICE 		"/dev/i2c-1"
 
@@ -73,22 +73,22 @@ int main(int argc, char **argv)
 	uint8_t chan = config & CONFIG_MASK_CHANNEL;
 	
 	/* Conversion mode? */
-	uint8_t *convstr = (config & CONFIG_MASK_CONV_MODE) ? "Continuous" : "One-Shot";
+	uint8_t *convstr = (config & CONFIG_MASK_CONV_MODE) ? "Continuous" : "One-shot";
 
 	/* Sample rate? */
 	uint8_t *spsstr;
 	switch(config & CONFIG_MASK_SPS) {
 		case 0:
-			spsstr = "240 samples/sec";
+			spsstr = "240 samples/sec (12 bits)";
 			break;
 		case 1:
-			spsstr = "60 samples/sec";
+			spsstr = "60 samples/sec (14 bits)";
 			break;
 		case 2:
-			spsstr = "15 samples/sec";
+			spsstr = "15 samples/sec (16 bits)";
 			break;
 		case 3:
-			spsstr = "3.75 samples/sec";
+			spsstr = "3.75 samples/sec (18 bits)";
 			break;
 	}
 
