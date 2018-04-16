@@ -22,10 +22,11 @@
 #define CONFIG_MASK_GAIN		0x03
 
 struct mcp342x_config {
-	uint8_t channel;
-	uint8_t mode;
-	uint8_t resolution;
-	uint8_t gain;
+	uint8_t ready:1;
+	uint8_t channel:2;
+	uint8_t mode:1;
+	uint8_t resolution:2;
+	uint8_t gain:2;
 	float lsb;
 };
 
