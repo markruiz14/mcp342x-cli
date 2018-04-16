@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <fcntl.h>
+#include <getopt.h>
+#include <string.h>
 
 #include <sys/ioctl.h>
 
@@ -10,15 +12,27 @@
 #include <linux/i2c-dev.h>
 
 #define CONFIG_SIZE		5				
-#define ADC_ADDR 		0x68
-#define I2C_DEVICE 		"/dev/i2c-1"
+#define ADC_ADDR		0x68
+#define I2C_DEVICE		"/dev/i2c-1"
 
-#define CONFIG_MASK_READY 		0x80
+#define CONFIG_MASK_READY		0x80
 #define CONFIG_MASK_CHANNEL		0x60
 #define CONFIG_MASK_CONV_MODE	0x10
 #define CONFIG_MASK_SPS			0x0C
 #define CONFIG_MASK_GAIN		0x03
 
+struct mcp342x_config {
+	uint8_t channel;
+	uint8_t mode;
+	uint8_t resolution;
+	uint8_t gain;
+};
+
+typedef enum {
+	MODE_CONFIG,
+	MODE_READ
+} mode;
+	
 void printbincharpad(uint8_t c)
 {
 	for (int i = 7; i >= 0; --i)
@@ -31,6 +45,42 @@ void printbincharpad(uint8_t c)
 
 int main(int argc, char **argv)
 {
+	mode mode;
+	int configmodeopts = 0, readmodeopts = 0;
+	struct mcp342x_config set_config = {};
+	int ch;
+	
+	while((ch = getopt(argc, argv, "r:c")) != -1) {
+		switch(ch) {
+			case 'r':
+				set_config.resolution = atoi(optarg);
+				configmodeopts = 1;
+				break;
+
+			case 'c':
+				readmodeopts = 1;
+				break;
+		}
+	}
+
+	/* The first non-option arg should be the mode */
+	char *modearg = argv[optind];
+	if(strcmp(modearg, "config") == 0) {
+		mode = MODE_CONFIG;
+	}
+	else if(strcmp(modearg, "read") == 0) {
+		mode = MODE_READ;
+	}
+	else {
+		exit(EXIT_FAILURE);
+	}
+
+	/* Check for mode and args mismatches */
+	if(((mode == MODE_CONFIG) && readmodeopts) || 
+	   ((mode == MODE_READ) && configmodeopts)) {
+	   	exit(EXIT_FAILURE);
+	}
+	   	
 	int i2cfd;
 
 	/* Open i2c device */
