@@ -81,7 +81,7 @@ void mcp342x_read_config(int fd, struct mcp342x_config *config)
 void mcp342x_print_config(struct mcp342x_config *config)
 {
 	/* ADC data ready? */
-	//uint8_t *rdystr = config-> ? "Yes" : "No";
+	uint8_t *rdystr = config->ready ? "Yes" : "No";
 
 	/* Conversion mode? */
 	char *convstr = config->mode ? "Continuous" : "One-shot";
@@ -107,7 +107,7 @@ void mcp342x_print_config(struct mcp342x_config *config)
 	char gainstr[3];
 	snprintf(gainstr, sizeof(gainstr), "x%i", config->gain + 1);
 	
-	//printf("Ready: %s\n", rdystr);
+	printf("Ready: %s\n", rdystr);
 	printf("Channel: %i\n", config->channel);
 	printf("Conversion mode: %s\n", convstr);
 	printf("Sample rate: %s\n", spsstr);
