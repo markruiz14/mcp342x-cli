@@ -26,13 +26,14 @@ struct mcp342x_config {
 	uint8_t mode;
 	uint8_t resolution;
 	uint8_t gain;
+	float lsb;
 };
 
 typedef enum {
 	MODE_CONFIG,
 	MODE_READ
 } mode;
-	
+
 void printbincharpad(uint8_t c)
 {
 	for (int i = 7; i >= 0; --i)
@@ -41,6 +42,75 @@ void printbincharpad(uint8_t c)
 	}
 
 	putchar('\n');
+}
+
+void mcp342x_read_config(int fd, struct mcp342x_config *config)
+{
+	uint8_t data[CONFIG_SIZE];
+	int n;
+
+	/* Read the chip's data */
+	if((n = read(fd, data, sizeof(data))) < 0) {
+		perror("Could not read data from ADC");
+		exit(EXIT_FAILURE);
+	}
+	else {
+		for(int i = 0; i < CONFIG_SIZE; i++)
+			printbincharpad(data[i]);	
+		printf("\n");
+	}
+
+	/* Find the config byte */
+	uint8_t configbits;
+	int bytepos = CONFIG_SIZE - 1;
+	while(bytepos >= 3) {
+		if(((1 << 7) | data[bytepos -1])  == data[bytepos]) {
+			configbits = data[bytepos - 1];
+			break;
+		}
+		bytepos--;
+	}
+
+	config->channel = ((configbits & CONFIG_MASK_CHANNEL) >> 5) + 1;
+	config->mode = (configbits & CONFIG_MASK_CONV_MODE) >> 4;
+	config->resolution = (configbits & CONFIG_MASK_SPS) >> 2;
+	config->gain = (configbits & CONFIG_MASK_GAIN);
+}
+
+void mcp342x_print_config(struct mcp342x_config *config)
+{
+	/* ADC data ready? */
+	//uint8_t *rdystr = config-> ? "Yes" : "No";
+
+	/* Conversion mode? */
+	char *convstr = config->mode ? "Continuous" : "One-shot";
+
+	/* Sample rate? */
+	uint8_t *spsstr;
+	switch(config->resolution) {
+		case 0:
+			spsstr = "240 samples/sec (12 bits)";
+			break;
+		case 1:
+			spsstr = "60 samples/sec (14 bits)";
+			break;
+		case 2:
+			spsstr = "15 samples/sec (16 bits)";
+			break;
+		case 3:
+			spsstr = "3.75 samples/sec (18 bits)";
+			break;
+	}
+
+	/* Gain? */
+	char gainstr[3];
+	snprintf(gainstr, sizeof(gainstr), "x%i", config->gain + 1);
+	
+	//printf("Ready: %s\n", rdystr);
+	printf("Channel: %i\n", config->channel);
+	printf("Conversion mode: %s\n", convstr);
+	printf("Sample rate: %s\n", spsstr);
+	printf("Gain: %s\n", gainstr);
 }
 
 int main(int argc, char **argv)
@@ -95,8 +165,6 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}	
 
-	int n;
-
 #if 0 
 	uint8_t cfgbits = 0b00010000;
 	if((n = write(i2cfd, &cfgbits, sizeof(cfgbits))) < 0) {
@@ -105,89 +173,14 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	uint8_t data[CONFIG_SIZE];
-
-	/* Read the chip's data */
-	if((n = read(i2cfd, data, sizeof(data))) < 0) {
-		perror("Could not read data from ADC");
-		exit(EXIT_FAILURE);
-	}
-	else {
-		for(int i = 0; i < CONFIG_SIZE; i++)
-			printbincharpad(data[i]);	
-		printf("\n");
-	}
-
-	/* Find the config byte */
-	uint8_t config;
-	int bytepos = CONFIG_SIZE - 1;
-	while(bytepos >= 3) {
-		if(((1 << 7) | data[bytepos -1])  == data[bytepos]) {
-			config = data[bytepos - 1];
-			break;
-		}
-		bytepos--;
-	}
-
-	/* ADC data ready? */
-	uint8_t *rdystr = (config & CONFIG_MASK_READY) ? "Yes" : "No";
-
-	/* Selected channel? */
-	uint8_t chan = (config & CONFIG_MASK_CHANNEL) >> 5;
-		
-	/* Conversion mode? */
-	uint8_t *convstr = (config & CONFIG_MASK_CONV_MODE) ? "Continuous" : "One-shot";
-
-	/* Sample rate? */
-	uint8_t *spsstr;
-	double lsb;
-	int pga;
-	switch((config & CONFIG_MASK_SPS) >> 2) {
-		case 0:
-			spsstr = "240 samples/sec (12 bits)";
-			lsb = 0.001;
-			break;
-		case 1:
-			spsstr = "60 samples/sec (14 bits)";
-			lsb = 0.00025;
-			break;
-		case 2:
-			spsstr = "15 samples/sec (16 bits)";
-			lsb = 0.0000625;
-			break;
-		case 3:
-			spsstr = "3.75 samples/sec (18 bits)";
-			lsb = 0.000015625;
-			break;
-	}
-
-	/* Gain? */
-	char *gainstr;
-	switch(config & CONFIG_MASK_GAIN) {
-		case 0:
-			gainstr = "x1";
-			pga = 1;
-			break;
-		case 1:
-			gainstr = "x2";
-			pga = 2;
-			break;
-		case 2:
-			gainstr = "x4";
-			pga = 4;
-			break;
-		case 3:
-			gainstr = "x8";
-			pga = 8;
-			break;
-	}
+	struct mcp342x_config config = {};
+	mcp342x_read_config(i2cfd, &config);
 	
-	printf("Ready: %s\n", rdystr);
-	printf("Channel: %i\n", chan + 1);
-	printf("Conversion mode: %s\n", convstr);
-	printf("Sample rate: %s\n", spsstr);
-	printf("Gain: %s\n", gainstr);
+	/* Print config if only arg is 'config' */
+	if((mode == MODE_CONFIG) && !configmodeopts)
+		mcp342x_print_config(&config);
 
+/*
 	uint32_t outputcode;
 	if((config & CONFIG_MASK_SPS) == 12) {
 		outputcode = (data[0] << 16) | (data[1] << 8) | data[2];
@@ -200,6 +193,6 @@ int main(int argc, char **argv)
 			
 	double value = outputcode * (lsb/pga);
 	printf("value: %f\n", value);
-
+*/
 	close(i2cfd);
 }
