@@ -54,11 +54,11 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	if((n = read(fd, data, sizeof(data))) < 0) {
 		return -1;
 	}
-	else {
+	/*else {
 		for(int i = 0; i < CONFIG_SIZE; i++)
 			printbincharpad(data[i]);	
 		printf("\n");
-	}
+	}*/
 
 	/* Find the config byte */
 	uint8_t configbits;
@@ -153,15 +153,18 @@ int main(int argc, char **argv)
 	struct mcp342x_config set_config = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 	int ch;
 	
-	while((ch = getopt(argc, argv, "r:c:")) != -1) {
+	while((ch = getopt(argc, argv, "r:c:m:")) != -1) {
 		switch(ch) {
 			case 'r':
 				set_config.resolution = atoi(optarg);
 				configmodeopts = 1;
 				break;
-
 			case 'c':
 				set_config.channel = atoi(optarg);
+				configmodeopts = 1;
+				break;
+			case 'm':
+				set_config.mode = atoi(optarg);
 				configmodeopts = 1;
 				break;
 		}
@@ -199,18 +202,16 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}	
 
-#if 0 
-
-#endif
-
+	/* Read the current config */
 	struct mcp342x_config config = {};
 	mcp342x_read_config(i2cfd, &config);
 	
-	/* Print config if only arg is 'config' */
 	if(mode == MODE_CONFIG) {
+		/* Print config if only arg is 'config' */
 		if(!configmodeopts) {
 			mcp342x_print_config(&config);
 		}
+		/* Else user has set config options */
 		else {
 			mcp342x_apply_config(set_config, &config);
 			mcp342x_write_config(i2cfd, &config);
