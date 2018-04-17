@@ -15,18 +15,18 @@
 #define ADC_ADDR		0x68
 #define I2C_DEVICE		"/dev/i2c-1"
 
-#define CONFIG_MASK_READY		0x80
-#define CONFIG_MASK_CHANNEL		0x60
-#define CONFIG_MASK_CONV_MODE	0x10
-#define CONFIG_MASK_SPS			0x0C
-#define CONFIG_MASK_GAIN		0x03
+#define CONFIG_MASK_READY			0x80
+#define CONFIG_MASK_CHANNEL			0x60
+#define CONFIG_MASK_CONV_MODE		0x10
+#define CONFIG_MASK_SPS				0x0C
+#define CONFIG_MASK_GAIN			0x03
 
 struct mcp342x_config {
-	uint8_t ready:1;
-	uint8_t channel:2;
-	uint8_t mode:1;
-	uint8_t resolution:2;
-	uint8_t gain:2;
+	uint8_t ready;
+	uint8_t channel;
+	uint8_t mode;
+	uint8_t resolution;
+	uint8_t gain;
 	float lsb;
 };
 
@@ -45,15 +45,14 @@ void printbincharpad(uint8_t c)
 	putchar('\n');
 }
 
-void mcp342x_read_config(int fd, struct mcp342x_config *config)
+int mcp342x_read_config(int fd, struct mcp342x_config *config)
 {
 	uint8_t data[CONFIG_SIZE];
 	int n;
 
 	/* Read the chip's data */
 	if((n = read(fd, data, sizeof(data))) < 0) {
-		perror("Could not read data from ADC");
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 	else {
 		for(int i = 0; i < CONFIG_SIZE; i++)
@@ -76,6 +75,39 @@ void mcp342x_read_config(int fd, struct mcp342x_config *config)
 	config->mode = (configbits & CONFIG_MASK_CONV_MODE) >> 4;
 	config->resolution = (configbits & CONFIG_MASK_SPS) >> 2;
 	config->gain = (configbits & CONFIG_MASK_GAIN);
+
+	return 0;
+}
+
+void mcp342x_apply_config(struct mcp342x_config src, struct mcp342x_config *dest)
+{
+	if(src.ready != 0xFF)
+		dest->ready = src.ready;
+
+	if(src.channel != 0xFF)
+		dest->channel = src.channel;
+
+	if(src.mode != 0xFF)
+		dest->mode = src.mode;
+
+	if(src.resolution != 0xFF)
+		dest->resolution = src.resolution;
+
+	if(src.gain != 0xFF)
+		dest->gain= src.gain;
+}
+
+int mcp342x_write_config(int fd, struct mcp342x_config *config)
+{
+	uint8_t byte = 0;
+
+	byte |= config->ready << 7;
+	byte |= (config->channel - 1) << 5;
+	byte |= config->mode << 4;
+	byte |= config->resolution << 2;
+	byte |= config->gain;
+
+	return write(fd, &byte, sizeof(byte));
 }
 
 void mcp342x_print_config(struct mcp342x_config *config)
@@ -118,10 +150,10 @@ int main(int argc, char **argv)
 {
 	mode mode;
 	int configmodeopts = 0, readmodeopts = 0;
-	struct mcp342x_config set_config = {};
+	struct mcp342x_config set_config = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 	int ch;
 	
-	while((ch = getopt(argc, argv, "r:c")) != -1) {
+	while((ch = getopt(argc, argv, "r:c:")) != -1) {
 		switch(ch) {
 			case 'r':
 				set_config.resolution = atoi(optarg);
@@ -129,7 +161,8 @@ int main(int argc, char **argv)
 				break;
 
 			case 'c':
-				readmodeopts = 1;
+				set_config.channel = atoi(optarg);
+				configmodeopts = 1;
 				break;
 		}
 	}
@@ -167,19 +200,24 @@ int main(int argc, char **argv)
 	}	
 
 #if 0 
-	uint8_t cfgbits = 0b00010000;
-	if((n = write(i2cfd, &cfgbits, sizeof(cfgbits))) < 0) {
-		perror("Failed writing configuration bits");
-		exit(EXIT_FAILURE);
-	}
+
 #endif
 
 	struct mcp342x_config config = {};
 	mcp342x_read_config(i2cfd, &config);
 	
 	/* Print config if only arg is 'config' */
-	if((mode == MODE_CONFIG) && !configmodeopts)
-		mcp342x_print_config(&config);
+	if(mode == MODE_CONFIG) {
+		if(!configmodeopts) {
+			mcp342x_print_config(&config);
+		}
+		else {
+			mcp342x_apply_config(set_config, &config);
+			mcp342x_write_config(i2cfd, &config);
+			mcp342x_read_config(i2cfd, &config);
+			mcp342x_print_config(&config);
+		}
+	}
 
 /*
 	uint32_t outputcode;
