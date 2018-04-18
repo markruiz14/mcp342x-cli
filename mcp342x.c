@@ -21,12 +21,18 @@
 #define CONFIG_MASK_SPS				0x0C
 #define CONFIG_MASK_GAIN			0x03
 
+#define CONFIG_RES_12BITS			0x00
+#define CONFIG_RES_14BITS			0x01
+#define CONFIG_RES_16BITS			0x02
+#define CONFIG_RES_18BITS			0x03
+
 struct mcp342x_config {
 	uint8_t ready;
 	uint8_t channel;
 	uint8_t mode;
 	uint8_t resolution;
 	uint8_t gain;
+	uint32_t outputcode;
 	float lsb;
 };
 
@@ -75,6 +81,14 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	config->mode = (configbits & CONFIG_MASK_CONV_MODE) >> 4;
 	config->resolution = (configbits & CONFIG_MASK_SPS) >> 2;
 	config->gain = (configbits & CONFIG_MASK_GAIN);
+
+	/* Save the output code */
+	if(config->resolution == CONFIG_RES_18BITS) {
+		config->outputcode = (data[0] << 16) | (data[1] << 8) | data[2];
+	}
+	else {
+		config->outputcode = (data[0] << 8) | data[1];
+	}
 
 	return 0;
 }
@@ -234,7 +248,7 @@ int main(int argc, char **argv)
 	uint32_t outputcode;
 	if((config & CONFIG_MASK_SPS) == 12) {
 		outputcode = (data[0] << 16) | (data[1] << 8) | data[2];
-	} 
+			} 
 	else {
 		outputcode = (data[0] << 8) | data[1];
 	}
@@ -245,4 +259,5 @@ int main(int argc, char **argv)
 	printf("value: %f\n", value);
 */
 	close(i2cfd);
+
 }
