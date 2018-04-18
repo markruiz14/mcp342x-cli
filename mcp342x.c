@@ -110,17 +110,22 @@ int mcp342x_write_config(int fd, struct mcp342x_config *config)
 	return write(fd, &byte, sizeof(byte));
 }
 
-void mcp342x_print_config(struct mcp342x_config *config)
+float mcp342x_get_value(int fd, struct mcp342x_config *config)
+{
+
+}
+
+void mcp342x_print_config(struct mcp342x_config config)
 {
 	/* ADC data ready? */
-	uint8_t *rdystr = config->ready ? "Yes" : "No";
+	uint8_t *rdystr = config.ready ? "Yes" : "No";
 
 	/* Conversion mode? */
-	char *convstr = config->mode ? "Continuous" : "One-shot";
+	char *convstr = config.mode ? "Continuous" : "One-shot";
 
 	/* Sample rate? */
 	uint8_t *spsstr;
-	switch(config->resolution) {
+	switch(config.resolution) {
 		case 0:
 			spsstr = "240 samples/sec (12 bits)";
 			break;
@@ -137,10 +142,10 @@ void mcp342x_print_config(struct mcp342x_config *config)
 
 	/* Gain? */
 	char gainstr[3];
-	snprintf(gainstr, sizeof(gainstr), "x%i", config->gain + 1);
+	snprintf(gainstr, sizeof(gainstr), "x%i", config.gain + 1);
 	
 	printf("Ready: %s\n", rdystr);
-	printf("Channel: %i\n", config->channel);
+	printf("Channel: %i\n", config.channel);
 	printf("Conversion mode: %s\n", convstr);
 	printf("Sample rate: %s\n", spsstr);
 	printf("Gain: %s\n", gainstr);
@@ -209,14 +214,19 @@ int main(int argc, char **argv)
 	if(mode == MODE_CONFIG) {
 		/* Print config if only arg is 'config' */
 		if(!configmodeopts) {
-			mcp342x_print_config(&config);
+			mcp342x_print_config(config);
 		}
 		/* Else user has set config options */
 		else {
 			mcp342x_apply_config(set_config, &config);
 			mcp342x_write_config(i2cfd, &config);
 			mcp342x_read_config(i2cfd, &config);
-			mcp342x_print_config(&config);
+			mcp342x_print_config(config);
+		}
+	}
+	else if(mode == MODE_READ) {
+		if(!readmodeopts) {
+			printf("%f", mcp342x_get_value(i2cfd, &config));
 		}
 	}
 
