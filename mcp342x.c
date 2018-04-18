@@ -80,7 +80,23 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	config->channel = ((configbits & CONFIG_MASK_CHANNEL) >> 5) + 1;
 	config->mode = (configbits & CONFIG_MASK_CONV_MODE) >> 4;
 	config->resolution = (configbits & CONFIG_MASK_SPS) >> 2;
-	config->gain = (configbits & CONFIG_MASK_GAIN);
+	config->gain = (configbits & CONFIG_MASK_GAIN) + 1;
+
+	/* LSB is mapped to resolution */
+	switch(config->resolution) {
+		case 0:
+			config->lsb = 0.001;
+			break;
+		case 1:
+			config->lsb = 0.00025;
+			break;
+		case 2:
+			config->lsb = 0.0000625;
+			break;
+		case 3:
+			config->lsb = 0.000015625;
+			break;
+	}
 
 	/* Save the output code */
 	if(config->resolution == CONFIG_RES_18BITS) {
@@ -119,14 +135,22 @@ int mcp342x_write_config(int fd, struct mcp342x_config *config)
 	byte |= (config->channel - 1) << 5;
 	byte |= config->mode << 4;
 	byte |= config->resolution << 2;
-	byte |= config->gain;
+	byte |= config->gain - 1;
 
 	return write(fd, &byte, sizeof(byte));
 }
 
 float mcp342x_get_value(int fd, struct mcp342x_config *config)
-{
+{	
+	/* Write the config to ADC first if !NULL */
+	if(config) {
 
+	}
+	
+	struct mcp342x_config data = {};
+	mcp342x_read_config(fd, &data);
+
+	return (float)data.outputcode * (data.lsb / (float)data.gain);
 }
 
 void mcp342x_print_config(struct mcp342x_config config)
@@ -156,7 +180,7 @@ void mcp342x_print_config(struct mcp342x_config config)
 
 	/* Gain? */
 	char gainstr[3];
-	snprintf(gainstr, sizeof(gainstr), "x%i", config.gain + 1);
+	snprintf(gainstr, sizeof(gainstr), "x%i", config.gain);
 	
 	printf("Ready: %s\n", rdystr);
 	printf("Channel: %i\n", config.channel);
@@ -240,24 +264,11 @@ int main(int argc, char **argv)
 	}
 	else if(mode == MODE_READ) {
 		if(!readmodeopts) {
-			printf("%f", mcp342x_get_value(i2cfd, &config));
+			printf("%f", mcp342x_get_value(i2cfd, NULL));
 		}
 	}
 
-/*
-	uint32_t outputcode;
-	if((config & CONFIG_MASK_SPS) == 12) {
-		outputcode = (data[0] << 16) | (data[1] << 8) | data[2];
-			} 
-	else {
-		outputcode = (data[0] << 8) | data[1];
-	}
-
-	printf("outputcode: %i\n", outputcode);
-			
-	double value = outputcode * (lsb/pga);
-	printf("value: %f\n", value);
-*/
 	close(i2cfd);
 
 }
+
