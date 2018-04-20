@@ -194,9 +194,11 @@ int main(int argc, char **argv)
 	mode mode;
 	int configmodeopts = 0, readmodeopts = 0;
 	struct mcp342x_config set_config = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+	float readinterval;
+	int maxreadcount;
 	int ch;
 	
-	while((ch = getopt(argc, argv, "r:c:m:")) != -1) {
+	while((ch = getopt(argc, argv, "r:c:m:i:n:")) != -1) {
 		switch(ch) {
 			case 'r':
 				set_config.resolution = atoi(optarg);
@@ -209,6 +211,14 @@ int main(int argc, char **argv)
 			case 'm':
 				set_config.mode = atoi(optarg);
 				configmodeopts = 1;
+				break;
+			case 'i':
+				readinterval = atof(optarg);
+				readmodeopts = 1;
+				break;
+			case 'n':
+				maxreadcount = atoi(optarg);
+				readmodeopts = 1;
 				break;
 		}
 	}
@@ -264,7 +274,15 @@ int main(int argc, char **argv)
 	}
 	else if(mode == MODE_READ) {
 		if(!readmodeopts) {
-			printf("%f", mcp342x_get_value(i2cfd, NULL));
+			printf("%f\n", mcp342x_get_value(i2cfd, NULL));
+		}
+		else {
+			if((readinterval != 0) && (maxreadcount != 0)) {
+				for(int i = 0; i < maxreadcount; i++) {
+					printf("%i,%f\n", i, mcp342x_get_value(i2cfd, NULL));
+					usleep(readinterval * 1e6);
+				}
+			}
 		}
 	}
 
