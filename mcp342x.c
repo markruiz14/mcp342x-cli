@@ -189,6 +189,28 @@ void mcp342x_print_config(struct mcp342x_config config)
 	printf("Gain: %s\n", gainstr);
 }
 
+int parse_channels(const char *arg)
+{
+	char *s = strdup(arg);
+	char *tok = strtok(s, ",");
+	int channels = 0;
+
+	while(tok != NULL) {
+		int c = atoi(tok);
+		if((c > 0) && (c < 5)) {
+			channels |= 1 << (c - 1);
+		}
+		else {
+			channels = -1;	
+			break;
+		}
+		tok = strtok(NULL, ",");
+	}
+
+	free(s);
+	return channels;
+}
+
 int main(int argc, char **argv)
 {
 	mode mode;
@@ -196,6 +218,7 @@ int main(int argc, char **argv)
 	struct mcp342x_config set_config = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 	float readinterval;
 	int maxreadcount;
+	int channels;
 	int ch;
 	
 	while((ch = getopt(argc, argv, "r:c:m:i:n:")) != -1) {
@@ -205,8 +228,10 @@ int main(int argc, char **argv)
 				configmodeopts = 1;
 				break;
 			case 'c':
-				set_config.channel = atoi(optarg);
-				configmodeopts = 1;
+				if((channels = parse_channels(optarg)) < 0) {
+					printf("Invalid '-c' argument: %s\n", optarg);
+					exit(EXIT_FAILURE);
+				}
 				break;
 			case 'm':
 				set_config.mode = atoi(optarg);
@@ -233,6 +258,28 @@ int main(int argc, char **argv)
 	}
 	else {
 		exit(EXIT_FAILURE);
+	}
+
+	/* -c is an overloaded parameter, check proper plurality
+	 * MODE_CONFIG = channel to set
+	 * MODE_READ = channel(s) to read
+	 */
+	if(mode == MODE_CONFIG) {
+		int numchans = 0;
+		for(int mask = 1; mask <= 8; mask <<= 1)
+			if(channels & mask)
+				numchans++;
+
+		if(numchans > 1) {
+			printf("Invalid '-c' argument: You can only specify a single channel in config mode\n");
+			exit(EXIT_FAILURE);
+		}
+
+		set_config.channel = channels;
+		configmodeopts = 1;
+	}
+	else {
+
 	}
 
 	/* Check for mode and args mismatches */
