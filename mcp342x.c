@@ -51,6 +51,42 @@ void printbincharpad(uint8_t c)
 	putchar('\n');
 }
 
+void mcp342x_print_config(struct mcp342x_config config)
+{
+	/* ADC data ready? */
+	uint8_t *rdystr = config.ready ? "Yes" : "No";
+
+	/* Conversion mode? */
+	char *convstr = config.mode ? "Continuous" : "One-shot";
+
+	/* Sample rate? */
+	uint8_t *spsstr;
+	switch(config.resolution) {
+		case 0:
+			spsstr = "240 samples/sec (12 bits)";
+			break;
+		case 1:
+			spsstr = "60 samples/sec (14 bits)";
+			break;
+		case 2:
+			spsstr = "15 samples/sec (16 bits)";
+			break;
+		case 3:
+			spsstr = "3.75 samples/sec (18 bits)";
+			break;
+	}
+
+	/* Gain? */
+	char gainstr[3];
+	snprintf(gainstr, sizeof(gainstr), "x%i", config.gain);
+	
+	printf("Ready: %s\n", rdystr);
+	printf("Channel: %i\n", config.channel);
+	printf("Conversion mode: %s\n", convstr);
+	printf("Sample rate: %s\n", spsstr);
+	printf("Gain: %s\n", gainstr);
+}
+
 int mcp342x_read_config(int fd, struct mcp342x_config *config)
 {
 	uint8_t data[CONFIG_SIZE];
@@ -144,97 +180,72 @@ float mcp342x_get_value(int fd, struct mcp342x_config *config)
 {	
 	/* Write the config to ADC first if !NULL */
 	if(config) {
-
+		mcp342x_write_config(fd, config);
 	}
 	
 	struct mcp342x_config data = {};
 	mcp342x_read_config(fd, &data);
+	//mcp342x_print_config(data);
 
 	return (float)data.outputcode * (data.lsb / (float)data.gain);
 }
 
-void mcp342x_print_config(struct mcp342x_config config)
-{
-	/* ADC data ready? */
-	uint8_t *rdystr = config.ready ? "Yes" : "No";
-
-	/* Conversion mode? */
-	char *convstr = config.mode ? "Continuous" : "One-shot";
-
-	/* Sample rate? */
-	uint8_t *spsstr;
-	switch(config.resolution) {
-		case 0:
-			spsstr = "240 samples/sec (12 bits)";
-			break;
-		case 1:
-			spsstr = "60 samples/sec (14 bits)";
-			break;
-		case 2:
-			spsstr = "15 samples/sec (16 bits)";
-			break;
-		case 3:
-			spsstr = "3.75 samples/sec (18 bits)";
-			break;
-	}
-
-	/* Gain? */
-	char gainstr[3];
-	snprintf(gainstr, sizeof(gainstr), "x%i", config.gain);
-	
-	printf("Ready: %s\n", rdystr);
-	printf("Channel: %i\n", config.channel);
-	printf("Conversion mode: %s\n", convstr);
-	printf("Sample rate: %s\n", spsstr);
-	printf("Gain: %s\n", gainstr);
-}
-
-int parse_channels(const char *arg)
+int parse_channels(const char *arg, uint8_t **parsedchannels)
 {
 	char *s = strdup(arg);
 	char *tok = strtok(s, ",");
-	int channels = 0;
+	uint8_t numchannels = 0;
 
 	while(tok != NULL) {
 		int c = atoi(tok);
 		if((c > 0) && (c < 5)) {
-			channels |= 1 << (c - 1);
+			if(*parsedchannels == NULL)
+				*parsedchannels = (uint8_t *)malloc(sizeof(uint8_t) * 4);
+			*(*parsedchannels + numchannels) = (uint8_t)c;
+			numchannels++;
 		}
 		else {
-			channels = -1;	
+			numchannels = -1;	
+			if(*parsedchannels != NULL)
+				free(*parsedchannels);
 			break;
 		}
 		tok = strtok(NULL, ",");
 	}
 
 	free(s);
-	return channels;
+	return numchannels;
 }
 
 int main(int argc, char **argv)
 {
 	mode mode;
-	int configmodeopts = 0, readmodeopts = 0;
+	uint8_t configmodeopts = 0, readmodeopts = 0;
 	struct mcp342x_config set_config = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-	float readinterval;
-	int maxreadcount;
-	int channels;
+	float readinterval = 0;
+	int maxreadcount = 0;
+	uint8_t *readchannels = NULL;
+	uint8_t numreadchannels = 0;
 	int ch;
 	
-	while((ch = getopt(argc, argv, "r:c:m:i:n:")) != -1) {
+	while((ch = getopt(argc, argv, "r:c:m:g:i:n:b")) != -1) {
 		switch(ch) {
 			case 'r':
 				set_config.resolution = atoi(optarg);
 				configmodeopts = 1;
 				break;
 			case 'c':
-				if((channels = parse_channels(optarg)) < 0) {
+				if((numreadchannels = parse_channels(optarg, &readchannels)) < 0) {
 					printf("Invalid '-c' argument: %s\n", optarg);
 					exit(EXIT_FAILURE);
 				}
 				break;
 			case 'm':
 				set_config.mode = atoi(optarg);
+				configmodeopts = 1;
+				break;
+			case 'g':
+				set_config.gain = atoi(optarg);
 				configmodeopts = 1;
 				break;
 			case 'i':
@@ -245,6 +256,11 @@ int main(int argc, char **argv)
 				maxreadcount = atoi(optarg);
 				readmodeopts = 1;
 				break;
+			case 'b': {
+				char buffer[8192];
+				setvbuf(stdout, buffer, _IOFBF, sizeof(buffer));
+				break;
+			}
 		}
 	}
 
@@ -265,18 +281,15 @@ int main(int argc, char **argv)
 	 * MODE_READ = channel(s) to read
 	 */
 	if(mode == MODE_CONFIG) {
-		int numchans = 0;
-		for(int mask = 1; mask <= 8; mask <<= 1)
-			if(channels & mask)
-				numchans++;
-
-		if(numchans > 1) {
-			printf("Invalid '-c' argument: You can only specify a single channel in config mode\n");
+		if(numreadchannels > 1) {
+			printf("Invalid '-c' argument: You can only specify a single channel "
+			                                                    "in config mode\n");
 			exit(EXIT_FAILURE);
 		}
-
-		set_config.channel = channels;
-		configmodeopts = 1;
+		else if(numreadchannels == 1) {
+			set_config.channel = readchannels[0];
+			configmodeopts = 1;
+		}
 	}
 	else {
 
@@ -325,13 +338,40 @@ int main(int argc, char **argv)
 		}
 		else {
 			if((readinterval != 0) && (maxreadcount != 0)) {
+				
+				int channelidx = 0;
+				
+				if(numreadchannels > 0) {
+					printf("n");
+					for(int i = 0; i < numreadchannels; i++) 
+						printf(",CH%i", i + 1);
+					printf("\n");
+				}
+
 				for(int i = 0; i < maxreadcount; i++) {
-					printf("%i,%f\n", i, mcp342x_get_value(i2cfd, NULL));
+					if(numreadchannels > 0) {
+						printf("%i", i);
+						for(int c = 0; c < numreadchannels; c++) {
+							config.channel = *(readchannels + channelidx);
+							printf(",%f", config.channel, mcp342x_get_value(i2cfd, &config));
+							channelidx = (channelidx < (numreadchannels - 1)) ? 
+									 					 channelidx + 1 : 0;
+							usleep(0.003 * 1e6);
+						}
+						printf("\n");
+					}
+					else {
+						printf("%i,%f\n", i, mcp342x_get_value(i2cfd, NULL));
+					}
+
 					usleep(readinterval * 1e6);
 				}
 			}
 		}
 	}
+
+	if(readchannels != NULL)
+		free(readchannels);
 
 	close(i2cfd);
 
