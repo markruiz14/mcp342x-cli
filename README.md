@@ -42,17 +42,28 @@ The following samples were taken using a MCP3424. Output of waveform generator w
 ---
 #### Sine
 ![Sinc function](http://s3.amazonaws.com/static.markruiz.com/mcp342x-cli/sine-all-channels.svg)
-`$ ./mcp342x read -c 1,2,3,4 -n 100 -i 0.004`
+
+```bash
+# Sampled every 0.004 seconds, 100 samples
+$ ./mcp342x read -c 1,2,3,4 -n 100 -i 0.004
+```
 
 ---
 #### Sinc
 ![Sinc function](http://s3.amazonaws.com/static.markruiz.com/mcp342x-cli/sinc.svg)
-`$ ./mcp342x read -c 1,2,3,4 -n 500 -i 0.004`
+
+```bash
+# Sampled every 0.004 seconds, 500 samples
+$ ./mcp342x read -c 1,2,3,4 -n 500 -i 0.004
+```
 
 ---
 #### Radar
 ![Sinc function](http://s3.amazonaws.com/static.markruiz.com/mcp342x-cli/radar.svg)
-`$ ./mcp342x read -c 1,2,3,4 -n 500 -i 0.004`
+```bash
+# Sampled every 0.004 seconds, 500 samples
+$ ./mcp342x read -c 1,2,3,4 -n 500 -i 0.004
+```
 
 ## Prerequisites
 * Linux w/ installed packages:
