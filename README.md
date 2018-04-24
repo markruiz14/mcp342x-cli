@@ -40,7 +40,7 @@ $ ./mcp342x read --c 1,2 -n 500 -i 0.01 -o csv > samples.csv
 The following samples were taken using a MCP3424. Output of waveform generator was simultaneously connected to all 4 input channels.
 
 ---
-![Sinc function](http://s3.amazonaws.com/static.markruiz.com/mcp342x-cli/sine-all-channels.svg)
+![Sinc function](http://s3.amazonaws.com/static.markruiz.com/mcp342x-cli/sine-all-channels2.svg)
 
 ```bash
 # Sampled every 0.004 seconds, 100 samples
@@ -48,7 +48,7 @@ $ ./mcp342x read -c 1,2,3,4 -n 100 -i 0.004
 ```
 
 ---
-![Sinc function](http://s3.amazonaws.com/static.markruiz.com/mcp342x-cli/sinc.svg)
+![Sinc function](http://s3.amazonaws.com/static.markruiz.com/mcp342x-cli/sinc2.svg)
 
 ```bash
 # Sampled every 0.004 seconds, 500 samples
@@ -56,7 +56,7 @@ $ ./mcp342x read -c 1,2,3,4 -n 500 -i 0.004
 ```
 
 ---
-![Sinc function](http://s3.amazonaws.com/static.markruiz.com/mcp342x-cli/radar.svg)
+![Sinc function](http://s3.amazonaws.com/static.markruiz.com/mcp342x-cli/radar2.svg)
 
 ```bash
 # Sampled every 0.004 seconds, 500 samples
