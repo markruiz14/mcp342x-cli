@@ -5,26 +5,37 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <string.h>
+#include <limits.h>
 
 #include <sys/ioctl.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 
-#define CONFIG_SIZE		5				
-#define ADC_ADDR		0x68
-#define I2C_DEVICE		"/dev/i2c-1"
+#define CONFIG_SIZE	5				
+#define ADC_ADDR	0x68
+#define I2C_DEVICE	"/dev/i2c-1"
 
-#define CONFIG_MASK_READY			0x80
-#define CONFIG_MASK_CHANNEL			0x60
-#define CONFIG_MASK_CONV_MODE		0x10
-#define CONFIG_MASK_SPS				0x0C
-#define CONFIG_MASK_GAIN			0x03
+#define CONFIG_MASK_READY		0x80
+#define CONFIG_MASK_CHANNEL		0x60
+#define CONFIG_MASK_CONV_MODE	0x10
+#define CONFIG_MASK_SPS			0x0C
+#define CONFIG_MASK_GAIN		0x03
 
-#define CONFIG_RES_12BITS			0x00
-#define CONFIG_RES_14BITS			0x01
-#define CONFIG_RES_16BITS			0x02
-#define CONFIG_RES_18BITS			0x03
+#define CONFIG_RES_12BITS		0x00
+#define CONFIG_RES_14BITS		0x01
+#define CONFIG_RES_16BITS		0x02
+#define CONFIG_RES_18BITS		0x03
+
+#define VREF_MAX_EXC_18BIT		1 >> 9
+#define VREF_MIN_EXC_18BIT		1 << 23
+#define VREF_MAX_EXC			1 >> 17
+#define VREF_MIN_EXC			1 << 15
+
+#define GEN_CALL_ADDR		0x0
+#define GEN_CALL_CMD_RESET	0x6
+#define GEN_CALL_CMD_LATCH	0x4
+#define GEN_CALL_CMD_CONV	0x8
 
 struct mcp342x_config {
 	uint8_t ready;
@@ -38,7 +49,8 @@ struct mcp342x_config {
 
 typedef enum {
 	MODE_CONFIG,
-	MODE_READ
+	MODE_READ,
+	MODE_RESET
 } mode;
 
 void printbincharpad(uint8_t c)
@@ -86,6 +98,7 @@ void mcp342x_print_config(struct mcp342x_config config)
 	printf("Sample rate: %s\n", spsstr);
 	printf("Gain: %s\n", gainstr);
 }
+
 
 int mcp342x_read_config(int fd, struct mcp342x_config *config)
 {
@@ -137,9 +150,25 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	/* Save the output code */
 	if(config->resolution == CONFIG_RES_18BITS) {
 		config->outputcode = (data[0] << 16) | (data[1] << 8) | data[2];
+		
+		/* Check if ADC Vref min/max exceeded */
+		if((VREF_MAX_EXC_18BIT | config->outputcode) == VREF_MAX_EXC_18BIT) {
+			config->outputcode = INT_MAX;
+		}
+		else if((VREF_MIN_EXC_18BIT | config->outputcode) == VREF_MIN_EXC_18BIT) {
+			config->outputcode = INT_MIN;
+		}
 	}
 	else {
 		config->outputcode = (data[0] << 8) | data[1];
+
+		/* Check if ADC Vref min/max exceeded */
+		if((VREF_MAX_EXC | config->outputcode) == VREF_MAX_EXC) {
+			config->outputcode = INT_MAX;
+		}
+		else if((VREF_MIN_EXC | config->outputcode) == VREF_MIN_EXC) {
+			config->outputcode = INT_MIN;
+		}
 	}
 
 	return 0;
@@ -176,11 +205,13 @@ int mcp342x_write_config(int fd, struct mcp342x_config *config)
 	return write(fd, &byte, sizeof(byte));
 }
 
-float mcp342x_get_value(int fd, struct mcp342x_config *config)
+float mcp342x_get_value(int fd, struct mcp342x_config *config, float delay)
 {	
 	/* Write the config to ADC first if !NULL */
 	if(config) {
 		mcp342x_write_config(fd, config);
+		if(delay != 0)
+			usleep(delay);
 	}
 	
 	struct mcp342x_config data = {};
@@ -227,7 +258,7 @@ int main(int argc, char **argv)
 	uint8_t *readchannels = NULL;
 	uint8_t numreadchannels = 0;
 	int ch;
-	
+
 	while((ch = getopt(argc, argv, "r:c:m:g:i:n:b")) != -1) {
 		switch(ch) {
 			case 'r':
@@ -272,6 +303,9 @@ int main(int argc, char **argv)
 	else if(strcmp(modearg, "read") == 0) {
 		mode = MODE_READ;
 	}
+	else if(strcmp(modearg, "reset") == 0) {
+		mode = MODE_RESET;
+	}
 	else {
 		exit(EXIT_FAILURE);
 	}
@@ -315,6 +349,16 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}	
 
+	if(mode == MODE_RESET) {
+		if(ioctl(i2cfd, I2C_SLAVE, GEN_CALL_ADDR) < 0) {
+			perror("Error preparing for general call broadcast");
+			exit(EXIT_FAILURE);
+		}
+		uint8_t cmd = GEN_CALL_CMD_RESET;
+		write(i2cfd, &cmd, sizeof(cmd));
+		exit(EXIT_SUCCESS);
+	}
+
 	/* Read the current config */
 	struct mcp342x_config config = {};
 	mcp342x_read_config(i2cfd, &config);
@@ -334,7 +378,7 @@ int main(int argc, char **argv)
 	}
 	else if(mode == MODE_READ) {
 		if(!readmodeopts) {
-			printf("%f\n", mcp342x_get_value(i2cfd, NULL));
+			printf("%f\n", mcp342x_get_value(i2cfd, NULL, 0));
 		}
 		else {
 			if((readinterval != 0) && (maxreadcount != 0)) {
@@ -350,18 +394,18 @@ int main(int argc, char **argv)
 
 				for(int i = 0; i < maxreadcount; i++) {
 					if(numreadchannels > 0) {
+						float delay = (numreadchannels > 0) ? 0.004 * 1e6 : 0;
 						printf("%i", i);
 						for(int c = 0; c < numreadchannels; c++) {
 							config.channel = *(readchannels + channelidx);
-							printf(",%f", config.channel, mcp342x_get_value(i2cfd, &config));
+							printf(",%f", config.channel, mcp342x_get_value(i2cfd, &config, delay));
 							channelidx = (channelidx < (numreadchannels - 1)) ? 
 									 					 channelidx + 1 : 0;
-							usleep(0.003 * 1e6);
 						}
 						printf("\n");
 					}
 					else {
-						printf("%i,%f\n", i, mcp342x_get_value(i2cfd, NULL));
+						printf("%i,%f\n", i, mcp342x_get_value(i2cfd, NULL, 0));
 					}
 
 					usleep(readinterval * 1e6);
