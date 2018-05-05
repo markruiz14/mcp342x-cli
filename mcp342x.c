@@ -13,6 +13,7 @@
 #include <linux/i2c-dev.h>
 
 #define CONFIG_SIZE	5				
+#define DBG_PRINT_READ_BITS 0
 #define ADC_ADDR	0x68
 #define I2C_DEVICE	"/dev/i2c-1"
 
@@ -27,15 +28,12 @@
 #define CONFIG_RES_16BITS		0x02
 #define CONFIG_RES_18BITS		0x03
 
-#define VREF_MAX_EXC_18BIT		1 >> 9
-#define VREF_MIN_EXC_18BIT		1 << 23
-#define VREF_MAX_EXC			1 >> 17
-#define VREF_MIN_EXC			1 << 15
+#define GEN_CALL_ADDR		0x00
+#define GEN_CALL_CMD_RESET	0x06
+#define GEN_CALL_CMD_LATCH	0x04
+#define GEN_CALL_CMD_CONV	0x08
 
-#define GEN_CALL_ADDR		0x0
-#define GEN_CALL_CMD_RESET	0x6
-#define GEN_CALL_CMD_LATCH	0x4
-#define GEN_CALL_CMD_CONV	0x8
+#define get_msb(n, bits) ((1 << (bits - 1)) & n)
 
 struct mcp342x_config {
 	uint8_t ready;
@@ -99,7 +97,6 @@ void mcp342x_print_config(struct mcp342x_config config)
 	printf("Gain: %s\n", gainstr);
 }
 
-
 int mcp342x_read_config(int fd, struct mcp342x_config *config)
 {
 	uint8_t data[CONFIG_SIZE];
@@ -109,11 +106,12 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	if((n = read(fd, data, sizeof(data))) < 0) {
 		return -1;
 	}
-	/*else {
-		for(int i = 0; i < CONFIG_SIZE; i++)
-			printbincharpad(data[i]);	
-		printf("\n");
-	}*/
+
+#if DBG_PRINT_READ_BITS == 1
+	for(int i = 0; i < CONFIG_SIZE; i++)
+		printbincharpad(data[i]);	
+	printf("\n");
+#endif
 
 	/* Find the config byte */
 	uint8_t configbits;
@@ -150,25 +148,9 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	/* Save the output code */
 	if(config->resolution == CONFIG_RES_18BITS) {
 		config->outputcode = (data[0] << 16) | (data[1] << 8) | data[2];
-		
-		/* Check if ADC Vref min/max exceeded */
-		if((VREF_MAX_EXC_18BIT | config->outputcode) == VREF_MAX_EXC_18BIT) {
-			config->outputcode = INT_MAX;
-		}
-		else if((VREF_MIN_EXC_18BIT | config->outputcode) == VREF_MIN_EXC_18BIT) {
-			config->outputcode = INT_MIN;
-		}
 	}
 	else {
 		config->outputcode = (data[0] << 8) | data[1];
-
-		/* Check if ADC Vref min/max exceeded */
-		if((VREF_MAX_EXC | config->outputcode) == VREF_MAX_EXC) {
-			config->outputcode = INT_MAX;
-		}
-		else if((VREF_MIN_EXC | config->outputcode) == VREF_MIN_EXC) {
-			config->outputcode = INT_MIN;
-		}
 	}
 
 	return 0;
@@ -218,7 +200,17 @@ float mcp342x_get_value(int fd, struct mcp342x_config *config, float delay)
 	mcp342x_read_config(fd, &data);
 	//mcp342x_print_config(data);
 
-	return (float)data.outputcode * (data.lsb / (float)data.gain);
+	int32_t outputcode = data.outputcode;
+
+	/* If MSB is 1, output code is signed. Use 2's complement outputcode */
+	if(((data.resolution == CONFIG_RES_18BITS) && (get_msb(data.outputcode, 18 ))) || 
+	   ((data.resolution <= CONFIG_RES_16BITS) && (get_msb(data.outputcode, 16)))) {
+	   		int nshift = (data.resolution == CONFIG_RES_18BITS) ? 8 : 16;
+	   		uint32_t mask = 0xFFFFFFFF >> nshift;
+	   		outputcode = -((data.outputcode ^ mask) + 1);
+	}
+	
+	return (float)outputcode * (data.lsb / (float)data.gain);
 }
 
 int parse_channels(const char *arg, uint8_t **parsedchannels)
