@@ -378,7 +378,7 @@ int main(int argc, char **argv)
 				int channelidx = 0;
 				
 				if(numreadchannels > 0) {
-					printf("n");
+					printf("Sample");
 					for(int i = 0; i < numreadchannels; i++) 
 						printf(",CH%i", i + 1);
 					printf("\n");
