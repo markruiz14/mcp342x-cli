@@ -14,8 +14,6 @@
 
 #define CONFIG_SIZE	5				
 #define DBG_PRINT_READ_BITS 0
-#define ADC_ADDR	0x68
-#define I2C_DEVICE	"/dev/i2c-1"
 
 #define CONFIG_MASK_READY		0x80
 #define CONFIG_MASK_CHANNEL		0x60
@@ -249,10 +247,16 @@ int main(int argc, char **argv)
 	int maxreadcount = 0;
 	uint8_t *readchannels = NULL;
 	uint8_t numreadchannels = 0;
-	int ch;
+	int ch, bus, addr;
 
-	while((ch = getopt(argc, argv, "r:c:m:g:i:n:b")) != -1) {
+	while((ch = getopt(argc, argv, "d:a:r:c:m:g:i:n:b")) != -1) {
 		switch(ch) {
+			case 'd':
+				bus = atoi(optarg);
+				break;
+			case 'a':
+				addr = strtol(optarg, NULL, 16);
+				break;
 			case 'r':
 				set_config.resolution = atoi(optarg);
 				configmodeopts = 1;
@@ -330,13 +334,15 @@ int main(int argc, char **argv)
 	int i2cfd;
 
 	/* Open i2c device */
-	if((i2cfd = open(I2C_DEVICE, O_RDWR)) < 0) {
+	char dev[12];
+	sprintf(dev, "/dev/i2c-%i", bus);
+	if((i2cfd = open(dev, O_RDWR)) < 0) {
 		perror("Could not open i2c device");
 		exit(EXIT_FAILURE);
 	}
 
 	/* Connect to the i2c device */ 
-	if(ioctl(i2cfd, I2C_SLAVE, ADC_ADDR) < 0) {
+	if(ioctl(i2cfd, I2C_SLAVE, addr) < 0) {
 		perror("Could not connect to ADC on i2c bus");
 		exit(EXIT_FAILURE);
 	}	
