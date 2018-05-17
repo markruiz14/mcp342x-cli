@@ -6,6 +6,7 @@
 #include <getopt.h>
 #include <string.h>
 #include <limits.h>
+#include <stdbool.h>
 
 #include <sys/ioctl.h>
 
@@ -248,10 +249,11 @@ int main(int argc, char **argv)
 	uint8_t *readchannels = NULL;
 	uint8_t numreadchannels = 0;
 	int ch, bus, addr;
+	bool output_csv = false;
 
-	while((ch = getopt(argc, argv, "d:a:r:c:m:g:i:n:b")) != -1) {
+	while((ch = getopt(argc, argv, "b:a:r:c:m:g:i:n:o:")) != -1) {
 		switch(ch) {
-			case 'd':
+			case 'b':
 				bus = atoi(optarg);
 				break;
 			case 'a':
@@ -283,11 +285,15 @@ int main(int argc, char **argv)
 				maxreadcount = atoi(optarg);
 				readmodeopts = 1;
 				break;
-			case 'b': {
-				char buffer[8192];
-				setvbuf(stdout, buffer, _IOFBF, sizeof(buffer));
+			case 'o': 
+				if(strcmp("csv", optarg) == 0) {
+					output_csv = true;
+				}
+				else {
+					printf("Invalid '-o' argument: %s\n", optarg);
+					exit(EXIT_FAILURE);
+				}	
 				break;
-			}
 		}
 	}
 
@@ -321,9 +327,7 @@ int main(int argc, char **argv)
 			configmodeopts = 1;
 		}
 	}
-	else {
 
-	}
 
 	/* Check for mode and args mismatches */
 	if(((mode == MODE_CONFIG) && readmodeopts) || 
@@ -361,6 +365,12 @@ int main(int argc, char **argv)
 	struct mcp342x_config config = {};
 	mcp342x_read_config(i2cfd, &config);
 	
+	if(numreadchannels == 0) {
+		numreadchannels = 1;
+		readchannels = (uint8_t *)malloc(sizeof(uint8_t));
+		readchannels[0] = config.channel;
+	}
+
 	if(mode == MODE_CONFIG) {
 		/* Print config if only arg is 'config' */
 		if(!configmodeopts) {
@@ -376,34 +386,49 @@ int main(int argc, char **argv)
 	}
 	else if(mode == MODE_READ) {
 		if(!readmodeopts) {
-			printf("%f\n", mcp342x_get_value(i2cfd, NULL, 0));
+			if(output_csv) {
+				printf("Sample,CH%i\n", config.channel);
+				printf("0,%f\n", mcp342x_get_value(i2cfd, NULL, 0));
+			}
+			else
+				printf("%f\n", mcp342x_get_value(i2cfd, NULL, 0));
 		}
 		else {
 			if((readinterval != 0) && (maxreadcount != 0)) {
-				
 				int channelidx = 0;
-				
-				if(numreadchannels > 0) {
+				if(output_csv) {
 					printf("Sample");
 					for(int i = 0; i < numreadchannels; i++) 
-						printf(",CH%i", i + 1);
+						printf(",CH%i", readchannels[i]);
 					printf("\n");
 				}
 
 				for(int i = 0; i < maxreadcount; i++) {
 					if(numreadchannels > 0) {
 						float delay = (numreadchannels > 0) ? 0.004 * 1e6 : 0;
-						printf("%i", i);
+						if(output_csv)
+							printf("%i", i);
 						for(int c = 0; c < numreadchannels; c++) {
 							config.channel = *(readchannels + channelidx);
-							printf(",%f", config.channel, mcp342x_get_value(i2cfd, &config, delay));
+							float value = mcp342x_get_value(i2cfd, &config, delay);
+							if(output_csv)
+								printf(",%f", value);
+							else
+								if(numreadchannels > 1)
+									printf("%i: %f\t", config.channel, value);
+								else
+									printf("%f\t", value);
 							channelidx = (channelidx < (numreadchannels - 1)) ? 
 									 					 channelidx + 1 : 0;
 						}
 						printf("\n");
 					}
 					else {
-						printf("%i,%f\n", i, mcp342x_get_value(i2cfd, NULL, 0));
+						float value = mcp342x_get_value(i2cfd, NULL, 0);
+						if(output_csv) 
+							printf("%i,%f\n", i, value);
+						else
+							printf("%f\n", value);
 					}
 
 					usleep(readinterval * 1e6);
