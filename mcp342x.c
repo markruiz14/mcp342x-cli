@@ -259,7 +259,8 @@ int main(int argc, char **argv)
 			configmodeopts = 1;
 			break;
 		case 'c':
-			if ((numreadchannels = parse_channels(optarg, &readchannels)) < 0) {
+			if ((numreadchannels = parse_channels(optarg, 
+				&readchannels)) < 0) {
 				printf("Invalid '-c' argument: %s\n", optarg);
 				exit(EXIT_FAILURE);
 			}
@@ -309,7 +310,8 @@ int main(int argc, char **argv)
 	 */
 	if (mode == MODE_CONFIG) {
 		if (numreadchannels > 1) {
-			printf("Invalid '-c' argument: You can only specify a single channel ");
+			printf("Invalid '-c' argument: You can only specify" 
+				" one channel in 'config' mode");
 			exit(EXIT_FAILURE);
 		} else if (numreadchannels == 1) {
 			set_config.channel = readchannels[0];
@@ -328,7 +330,8 @@ int main(int argc, char **argv)
 	char dev[12];
 	sprintf(dev, "/dev/i2c-%i", bus);
 	if ((i2cfd = open(dev, O_RDWR)) < 0) {
-		fprintf(stderr, "Could not open i2c device `%s`: %s\n", dev, strerror(errno));
+		fprintf(stderr, "Could not open i2c device `%s`: %s\n", dev, 
+			strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 
@@ -372,17 +375,20 @@ int main(int argc, char **argv)
 		if (!readmodeopts) {
 			if (output_csv) {
 				printf("Sample,CH%i\n", config.channel);
-				printf("0,%f\n", mcp342x_get_value(i2cfd, NULL, 0));
+				printf("0,%f\n", mcp342x_get_value(i2cfd, 
+					NULL, 0));
 			} else {
-				printf("%f\n", mcp342x_get_value(i2cfd, NULL, 0));
+				printf("%f\n", mcp342x_get_value(i2cfd, 
+					NULL, 0));
 			}
 		} else {
 			if ((readinterval != 0) && (maxreadcount != 0)) {
 				int channelidx = 0;
 				if (output_csv) {
 					printf("Sample");
-					for(int i = 0; i < numreadchannels; i++) 
-						printf(",CH%i", readchannels[i]);
+					for(int i = 0; i < numreadchannels; i++)
+						printf(",CH%i", 
+							readchannels[i]);
 					printf("\n");
 				}
 
