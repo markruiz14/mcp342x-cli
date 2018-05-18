@@ -407,59 +407,49 @@ int main(int argc, char **argv)
 			mcp342x_print_config(config);
 		}
 	} else if (mode == MODE_READ) {
-		if (!readmodeopts) {
-			if (output_csv) {
-				printf("Sample,CH%i\n", config.channel);
-				printf("0,%f\n", mcp342x_get_value(i2cfd, 
-					NULL, 0));
-			} else {
-				printf("%f\n", mcp342x_get_value(i2cfd, 
-					NULL, 0));
-			}
-		} else {
-			/* CSV header */
-			if (output_csv) {
-				printf("Sample");
-				for (int i = 0; i < numreadchannels; i++)
-					printf(",CH%i", readchannels[i]);
-				printf("\n");
-			}
-			
-			if (readinterval == 0)
-				readinterval = default_interval(config);
+		/* CSV header */
+		if (output_csv) {
+			printf("Sample");
+			for (int i = 0; i < numreadchannels; i++)
+				printf(",CH%i", readchannels[i]);
+			printf("\n");
+		}
+		
+		if (readinterval == 0)
+			readinterval = default_interval(config);
+		else if (maxreadcount == 0)
+			maxreadcount = INT_MAX;
 
-			int samples, channelidx;
-			do {
-				/* Sequential channel reads requires a delay 
-				   since we're doing a config write to switch
-				   the channel before doing a read operation */
-				float delay = (numreadchannels > 0) ? 
-						0.004 * 1e6 : 0;
+		int sample = 0;
+		do {
+			/* Sequential channel reads requires a delay 
+			   since we're doing a config write to switch
+			   the channel before doing a read operation */
+			float delay = (numreadchannels > 0) ? 0.004 * 1e6 : 0;
+
+			if (output_csv)
+				printf("%i", sample);
+
+			for (int i = 0; i < numreadchannels; i++) {
+				config.channel = *(readchannels + i);
+				float value = mcp342x_get_value(i2cfd, &config, 
+						delay);
 
 				if (output_csv)
-					printf("%i", i);
-
-				for (int i = 0; i < numreadchannels; i++) {
-					config.channel = *(readchannels + i);
-					float value = mcp342x_get_value(i2cfd, 
-							&config, delay);
-
-					if (output_csv)
-						printf(",%f", value);
+					printf(",%f", value);
+				else
+					if (numreadchannels > 1)
+						printf("%i: %f\t", 
+							config.channel, 
+							value);
 					else
-						if (numreadchannels > 1)
-							printf("%i: %f\t", 
-								config.channel, 
-								value);
-						else
-							printf("%f\t", value);
-				}
+						printf("%f\t", value);
+			}
 
-				printf("\n");
-				usleep(readinterval * 1e6);
-				samples++;
-			} while (samples < maxreadcount)
-		}
+			printf("\n");
+			usleep(readinterval * 1e6);
+			sample++;
+		} while ((sample < maxreadcount) || (maxreadcount == INT_MAX));
 	}
 
 	if (readchannels != NULL)
