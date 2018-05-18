@@ -7,25 +7,26 @@
 #include <string.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #include <sys/ioctl.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 
-#define CONFIG_SIZE	5				
-#define DBG_PRINT_READ_BITS 0
+#define CONFIG_SIZE		5				
+#define DBG_PRINT_READ_BITS	0
 
-#define CONFIG_MASK_READY		0x80
-#define CONFIG_MASK_CHANNEL		0x60
+#define CONFIG_MASK_READY	0x80
+#define CONFIG_MASK_CHANNEL	0x60
 #define CONFIG_MASK_CONV_MODE	0x10
-#define CONFIG_MASK_SPS			0x0C
-#define CONFIG_MASK_GAIN		0x03
+#define CONFIG_MASK_SPS		0x0C
+#define CONFIG_MASK_GAIN	0x03
 
-#define CONFIG_RES_12BITS		0x00
-#define CONFIG_RES_14BITS		0x01
-#define CONFIG_RES_16BITS		0x02
-#define CONFIG_RES_18BITS		0x03
+#define CONFIG_RES_12BITS	0x00
+#define CONFIG_RES_14BITS	0x01
+#define CONFIG_RES_16BITS	0x02
+#define CONFIG_RES_18BITS	0x03
 
 #define GEN_CALL_ADDR		0x00
 #define GEN_CALL_CMD_RESET	0x06
@@ -53,9 +54,7 @@ typedef enum {
 void printbincharpad(uint8_t c)
 {
 	for (int i = 7; i >= 0; --i)
-	{
 		putchar( (c & (1 << i)) ? '1' : '0' );
-	}
 
 	putchar('\n');
 }
@@ -70,19 +69,19 @@ void mcp342x_print_config(struct mcp342x_config config)
 
 	/* Sample rate? */
 	uint8_t *spsstr;
-	switch(config.resolution) {
-		case 0:
-			spsstr = "240 samples/sec (12 bits)";
-			break;
-		case 1:
-			spsstr = "60 samples/sec (14 bits)";
-			break;
-		case 2:
-			spsstr = "15 samples/sec (16 bits)";
-			break;
-		case 3:
-			spsstr = "3.75 samples/sec (18 bits)";
-			break;
+	switch (config.resolution) {
+	case 0:
+		spsstr = "240 samples/sec (12 bits)";
+		break;
+	case 1:
+		spsstr = "60 samples/sec (14 bits)";
+		break;
+	case 2:
+		spsstr = "15 samples/sec (16 bits)";
+		break;
+	case 3:
+		spsstr = "3.75 samples/sec (18 bits)";
+		break;
 	}
 
 	/* Gain? */
@@ -102,12 +101,11 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	int n;
 
 	/* Read the chip's data */
-	if((n = read(fd, data, sizeof(data))) < 0) {
+	if ((n = read(fd, data, sizeof(data))) < 0) 
 		return -1;
-	}
 
 #if DBG_PRINT_READ_BITS == 1
-	for(int i = 0; i < CONFIG_SIZE; i++)
+	for (int i = 0; i < CONFIG_SIZE; i++)
 		printbincharpad(data[i]);	
 	printf("\n");
 #endif
@@ -115,8 +113,8 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	/* Find the config byte */
 	uint8_t configbits;
 	int bytepos = CONFIG_SIZE - 1;
-	while(bytepos >= 3) {
-		if(((1 << 7) | data[bytepos -1])  == data[bytepos]) {
+	while (bytepos >= 3) {
+		if (((1 << 7) | data[bytepos -1])  == data[bytepos]) {
 			configbits = data[bytepos - 1];
 			break;
 		}
@@ -129,47 +127,45 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	config->gain = (configbits & CONFIG_MASK_GAIN) + 1;
 
 	/* LSB is mapped to resolution */
-	switch(config->resolution) {
-		case 0:
-			config->lsb = 0.001;
-			break;
-		case 1:
-			config->lsb = 0.00025;
-			break;
-		case 2:
-			config->lsb = 0.0000625;
-			break;
-		case 3:
-			config->lsb = 0.000015625;
-			break;
+	switch (config->resolution) {
+	case 0:
+		config->lsb = 0.001;
+		break;
+	case 1:
+		config->lsb = 0.00025;
+		break;
+	case 2:
+		config->lsb = 0.0000625;
+		break;
+	case 3:
+		config->lsb = 0.000015625;
+		break;
 	}
 
 	/* Save the output code */
-	if(config->resolution == CONFIG_RES_18BITS) {
+	if (config->resolution == CONFIG_RES_18BITS) 
 		config->outputcode = (data[0] << 16) | (data[1] << 8) | data[2];
-	}
-	else {
+	else 
 		config->outputcode = (data[0] << 8) | data[1];
-	}
 
 	return 0;
 }
 
 void mcp342x_apply_config(struct mcp342x_config src, struct mcp342x_config *dest)
 {
-	if(src.ready != 0xFF)
+	if (src.ready != 0xFF)
 		dest->ready = src.ready;
 
-	if(src.channel != 0xFF)
+	if (src.channel != 0xFF)
 		dest->channel = src.channel;
 
-	if(src.mode != 0xFF)
+	if (src.mode != 0xFF)
 		dest->mode = src.mode;
 
-	if(src.resolution != 0xFF)
+	if (src.resolution != 0xFF)
 		dest->resolution = src.resolution;
 
-	if(src.gain != 0xFF)
+	if (src.gain != 0xFF)
 		dest->gain= src.gain;
 }
 
@@ -189,20 +185,19 @@ int mcp342x_write_config(int fd, struct mcp342x_config *config)
 float mcp342x_get_value(int fd, struct mcp342x_config *config, float delay)
 {	
 	/* Write the config to ADC first if !NULL */
-	if(config) {
+	if (config) {
 		mcp342x_write_config(fd, config);
-		if(delay != 0)
+		if (delay != 0)
 			usleep(delay);
 	}
 	
 	struct mcp342x_config data = {};
 	mcp342x_read_config(fd, &data);
-	//mcp342x_print_config(data);
 
 	int32_t outputcode = data.outputcode;
 
 	/* If MSB is 1, output code is signed. Use 2's complement outputcode */
-	if(((data.resolution == CONFIG_RES_18BITS) && (get_msb(data.outputcode, 18 ))) || 
+	if (((data.resolution == CONFIG_RES_18BITS) && (get_msb(data.outputcode, 18 ))) || 
 	   ((data.resolution <= CONFIG_RES_16BITS) && (get_msb(data.outputcode, 16)))) {
 	   		int nshift = (data.resolution == CONFIG_RES_18BITS) ? 8 : 16;
 	   		uint32_t mask = 0xFFFFFFFF >> nshift;
@@ -218,17 +213,17 @@ int parse_channels(const char *arg, uint8_t **parsedchannels)
 	char *tok = strtok(s, ",");
 	uint8_t numchannels = 0;
 
-	while(tok != NULL) {
+	while (tok != NULL) {
 		int c = atoi(tok);
-		if((c > 0) && (c < 5)) {
-			if(*parsedchannels == NULL)
+		if ((c > 0) && (c < 5)) {
+			if (*parsedchannels == NULL)
 				*parsedchannels = (uint8_t *)malloc(sizeof(uint8_t) * 4);
 			*(*parsedchannels + numchannels) = (uint8_t)c;
 			numchannels++;
 		}
 		else {
 			numchannels = -1;	
-			if(*parsedchannels != NULL)
+			if (*parsedchannels != NULL)
 				free(*parsedchannels);
 			break;
 		}
@@ -251,64 +246,60 @@ int main(int argc, char **argv)
 	int ch, bus, addr;
 	bool output_csv = false;
 
-	while((ch = getopt(argc, argv, "b:a:r:c:m:g:i:n:o:")) != -1) {
-		switch(ch) {
-			case 'b':
-				bus = atoi(optarg);
-				break;
-			case 'a':
-				addr = strtol(optarg, NULL, 16);
-				break;
-			case 'r':
-				set_config.resolution = atoi(optarg);
-				configmodeopts = 1;
-				break;
-			case 'c':
-				if((numreadchannels = parse_channels(optarg, &readchannels)) < 0) {
-					printf("Invalid '-c' argument: %s\n", optarg);
-					exit(EXIT_FAILURE);
-				}
-				break;
-			case 'm':
-				set_config.mode = atoi(optarg);
-				configmodeopts = 1;
-				break;
-			case 'g':
-				set_config.gain = atoi(optarg);
-				configmodeopts = 1;
-				break;
-			case 'i':
-				readinterval = atof(optarg);
-				readmodeopts = 1;
-				break;
-			case 'n':
-				maxreadcount = atoi(optarg);
-				readmodeopts = 1;
-				break;
-			case 'o': 
-				if(strcmp("csv", optarg) == 0) {
-					output_csv = true;
-				}
-				else {
-					printf("Invalid '-o' argument: %s\n", optarg);
-					exit(EXIT_FAILURE);
-				}	
-				break;
+	while ((ch = getopt(argc, argv, "b:a:r:c:m:g:i:n:o:")) != -1) {
+		switch (ch) {
+		case 'b':
+			bus = atoi(optarg);
+			break;
+		case 'a':
+			addr = strtol(optarg, NULL, 16);
+			break;
+		case 'r':
+			set_config.resolution = atoi(optarg);
+			configmodeopts = 1;
+			break;
+		case 'c':
+			if ((numreadchannels = parse_channels(optarg, &readchannels)) < 0) {
+				printf("Invalid '-c' argument: %s\n", optarg);
+				exit(EXIT_FAILURE);
+			}
+			break;
+		case 'm':
+			set_config.mode = atoi(optarg);
+			configmodeopts = 1;
+			break;
+		case 'g':
+			set_config.gain = atoi(optarg);
+			configmodeopts = 1;
+			break;
+		case 'i':
+			readinterval = atof(optarg);
+			readmodeopts = 1;
+			break;
+		case 'n':
+			maxreadcount = atoi(optarg);
+			readmodeopts = 1;
+			break;
+		case 'o': 
+			if (strcmp("csv", optarg) == 0) {
+				output_csv = true;
+			} else {
+				printf("Invalid '-o' argument: %s\n", optarg);
+				exit(EXIT_FAILURE);
+			}	
+			break;
 		}
 	}
 
 	/* The first non-option arg should be the mode */
 	char *modearg = argv[optind];
-	if(strcmp(modearg, "config") == 0) {
+	if (strcmp(modearg, "config") == 0) {
 		mode = MODE_CONFIG;
-	}
-	else if(strcmp(modearg, "read") == 0) {
+	} else if (strcmp(modearg, "read") == 0) {
 		mode = MODE_READ;
-	}
-	else if(strcmp(modearg, "reset") == 0) {
+	} else if (strcmp(modearg, "reset") == 0) {
 		mode = MODE_RESET;
-	}
-	else {
+	} else {
 		exit(EXIT_FAILURE);
 	}
 
@@ -316,43 +307,39 @@ int main(int argc, char **argv)
 	 * MODE_CONFIG = channel to set
 	 * MODE_READ = channel(s) to read
 	 */
-	if(mode == MODE_CONFIG) {
-		if(numreadchannels > 1) {
-			printf("Invalid '-c' argument: You can only specify a single channel "
-			                                                    "in config mode\n");
+	if (mode == MODE_CONFIG) {
+		if (numreadchannels > 1) {
+			printf("Invalid '-c' argument: You can only specify a single channel ");
 			exit(EXIT_FAILURE);
-		}
-		else if(numreadchannels == 1) {
+		} else if (numreadchannels == 1) {
 			set_config.channel = readchannels[0];
 			configmodeopts = 1;
 		}
 	}
 
-
 	/* Check for mode and args mismatches */
-	if(((mode == MODE_CONFIG) && readmodeopts) || 
-	   ((mode == MODE_READ) && configmodeopts)) {
+	if (((mode == MODE_CONFIG) && readmodeopts) || 
+	   ((mode == MODE_READ) && configmodeopts)) 
 	   	exit(EXIT_FAILURE);
-	}
 	   	
 	int i2cfd;
 
 	/* Open i2c device */
 	char dev[12];
 	sprintf(dev, "/dev/i2c-%i", bus);
-	if((i2cfd = open(dev, O_RDWR)) < 0) {
-		perror("Could not open i2c device");
+	if ((i2cfd = open(dev, O_RDWR)) < 0) {
+		fprintf(stderr, "Could not open i2c device `%s`: %s\n", dev, strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 
 	/* Connect to the i2c device */ 
-	if(ioctl(i2cfd, I2C_SLAVE, addr) < 0) {
+	if (ioctl(i2cfd, I2C_SLAVE, addr) < 0) {
 		perror("Could not connect to ADC on i2c bus");
 		exit(EXIT_FAILURE);
 	}	
 
-	if(mode == MODE_RESET) {
-		if(ioctl(i2cfd, I2C_SLAVE, GEN_CALL_ADDR) < 0) {
+	if (mode == MODE_RESET) {
+		if (ioctl(i2cfd, I2C_SLAVE, GEN_CALL_ADDR) < 0) {
 			perror("Error preparing for general call broadcast");
 			exit(EXIT_FAILURE);
 		}
@@ -365,56 +352,52 @@ int main(int argc, char **argv)
 	struct mcp342x_config config = {};
 	mcp342x_read_config(i2cfd, &config);
 	
-	if(numreadchannels == 0) {
+	if (numreadchannels == 0) {
 		numreadchannels = 1;
 		readchannels = (uint8_t *)malloc(sizeof(uint8_t));
 		readchannels[0] = config.channel;
 	}
 
-	if(mode == MODE_CONFIG) {
-		/* Print config if only arg is 'config' */
-		if(!configmodeopts) {
+	if (mode == MODE_CONFIG) {
+		if (!configmodeopts) {
 			mcp342x_print_config(config);
-		}
-		/* Else user has set config options */
-		else {
+		} else { 
 			mcp342x_apply_config(set_config, &config);
 			mcp342x_write_config(i2cfd, &config);
 			mcp342x_read_config(i2cfd, &config);
 			mcp342x_print_config(config);
 		}
 	}
-	else if(mode == MODE_READ) {
-		if(!readmodeopts) {
-			if(output_csv) {
+	else if (mode == MODE_READ) {
+		if (!readmodeopts) {
+			if (output_csv) {
 				printf("Sample,CH%i\n", config.channel);
 				printf("0,%f\n", mcp342x_get_value(i2cfd, NULL, 0));
-			}
-			else
+			} else {
 				printf("%f\n", mcp342x_get_value(i2cfd, NULL, 0));
-		}
-		else {
-			if((readinterval != 0) && (maxreadcount != 0)) {
+			}
+		} else {
+			if ((readinterval != 0) && (maxreadcount != 0)) {
 				int channelidx = 0;
-				if(output_csv) {
+				if (output_csv) {
 					printf("Sample");
 					for(int i = 0; i < numreadchannels; i++) 
 						printf(",CH%i", readchannels[i]);
 					printf("\n");
 				}
 
-				for(int i = 0; i < maxreadcount; i++) {
-					if(numreadchannels > 0) {
+				for (int i = 0; i < maxreadcount; i++) {
+					if (numreadchannels > 0) {
 						float delay = (numreadchannels > 0) ? 0.004 * 1e6 : 0;
-						if(output_csv)
+						if (output_csv)
 							printf("%i", i);
-						for(int c = 0; c < numreadchannels; c++) {
+						for (int c = 0; c < numreadchannels; c++) {
 							config.channel = *(readchannels + channelidx);
 							float value = mcp342x_get_value(i2cfd, &config, delay);
-							if(output_csv)
+							if (output_csv)
 								printf(",%f", value);
 							else
-								if(numreadchannels > 1)
+								if (numreadchannels > 1)
 									printf("%i: %f\t", config.channel, value);
 								else
 									printf("%f\t", value);
@@ -422,10 +405,9 @@ int main(int argc, char **argv)
 									 					 channelidx + 1 : 0;
 						}
 						printf("\n");
-					}
-					else {
+					} else {
 						float value = mcp342x_get_value(i2cfd, NULL, 0);
-						if(output_csv) 
+						if (output_csv) 
 							printf("%i,%f\n", i, value);
 						else
 							printf("%f\n", value);
@@ -437,10 +419,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if(readchannels != NULL)
+	if (readchannels != NULL)
 		free(readchannels);
-
-	close(i2cfd);
-
 }
 
