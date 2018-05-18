@@ -73,12 +73,41 @@ typedef enum {
 	MODE_RESET
 } mode;
 
-void printbincharpad(uint8_t c)
+void print_usage(bool error)
 {
-	for (int i = 7; i >= 0; --i)
-		putchar( (c & (1 << i)) ? '1' : '0' );
+	FILE *output = error ? stderr : stdout;
+	/*fprintf(output, "mcp342x %s: CLI for configuring and reading data from "
+		"the MCP342x family of 18-Bit, multichannel ADC chips with I2C "
+		"interface.\n\n"); */
+	fprintf(output, "Usage: mcp342x read -b <i2cbus> -a <address> [-c] "
+		"[-i] [-n] [-o csv]\n");
+	fprintf(output, "       mcp342x config -b <i2cbus> -a <address> [-c] "
+		"[-r] [-m] [-g]\n");
+	fprintf(output, "       mcp342x reset -b <i2cbus>\n\n");
+	
+	fprintf(output, "Mode:\n");
+	fprintf(output, "\tread\t\tRead the configured channel's value \n"); 
+	fprintf(output, "\tconfig\t\tConfigure the ADC chip. Pass zero parameters to "
+		"read and display current configuration\n");
+	fprintf(output, "\treset\t\tBroadcast a RESET general call on the "
+		"specified bus\n\n");
+	
+	fprintf(output, "Read Mode Options:\n");
+	fprintf(output, "\t-c\t\tSpecified channel(s) to read from "
+		"(comma delimited)\n");
+	fprintf(output, "\t-i\t\tContinuously read the ADC at specified "
+		"interval (seconds)\n");
+	fprintf(output, "\t-n\t\tLimit to specified number of samples\n");
+	fprintf(output, "\t-o csv\t\tSet output format to CSV\n\n");
 
-	putchar('\n');
+	fprintf(output, "Config Mode Options:\n");
+	fprintf(output, "\t-c\t\tSet channel to read from\n");
+	fprintf(output, "\t-r\t\tSet resolution in bits. Valid values are 12, "
+		"14, 16, 18\n");
+	fprintf(output, "\t-m\t\tSet operation mode. 1 for continuous or 0 for "
+		"one-shot conversion mode\n");
+	fprintf(output, "\t-g\t\tSet channel gain. Valid values are 1, 2, 4, "
+		"or 8\n");
 }
 
 void mcp342x_print_config(struct mcp342x_config config)
@@ -282,6 +311,11 @@ int main(int argc, char **argv)
 	int ch, bus, addr;
 	bool output_csv = false;
 
+	if (argc  < 2) {
+		print_usage(true);
+		exit(EXIT_FAILURE);
+	}
+
 	while ((ch = getopt(argc, argv, "b:a:r:c:m:g:i:n:o:")) != -1) {
 		switch (ch) {
 		case 'b':
@@ -297,7 +331,8 @@ int main(int argc, char **argv)
 		case 'c':
 			if ((numreadchannels = parse_channels(optarg, 
 				&readchannels)) < 0) {
-				printf("Invalid '-c' argument: %s\n", optarg);
+				printf("Error: Invalid -c argument '%s'\n", optarg);
+				print_usage(true);
 				exit(EXIT_FAILURE);
 			}
 			break;
@@ -321,10 +356,13 @@ int main(int argc, char **argv)
 			if (strcmp("csv", optarg) == 0) {
 				output_csv = true;
 			} else {
-				printf("Invalid '-o' argument: %s\n", optarg);
+				printf("Error: Invalid -o argument '%s'\n", optarg);
 				exit(EXIT_FAILURE);
 			}	
 			break;
+		default:
+			print_usage(true);
+			exit(EXIT_FAILURE);
 		}
 	}
 
@@ -337,8 +375,12 @@ int main(int argc, char **argv)
 	} else if (strcmp(modearg, "reset") == 0) {
 		mode = MODE_RESET;
 	} else {
+		printf("Error: Unrecognized mode '%s'\n", modearg);
+		print_usage(true);
 		exit(EXIT_FAILURE);
 	}
+
+	/* Make sure i2c bus and address were specified */
 
 	/* -c is an overloaded parameter, check proper plurality
 	 * MODE_CONFIG = channel to set
