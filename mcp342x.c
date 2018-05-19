@@ -86,27 +86,27 @@ void print_usage(bool error)
 	fprintf(output, "       mcp342x reset -b <i2cbus>\n\n");
 	
 	fprintf(output, "Mode:\n");
-	fprintf(output, "\tread\t\tRead the configured channel's value \n"); 
-	fprintf(output, "\tconfig\t\tConfigure the ADC chip. Pass zero parameters to "
+	fprintf(output, "    read\tRead the configured channel's value \n"); 
+	fprintf(output, "    config\tConfigure the ADC chip. Pass zero parameters to "
 		"read and display current configuration\n");
-	fprintf(output, "\treset\t\tBroadcast a RESET general call on the "
+	fprintf(output, "    reset\tBroadcast a RESET general call on the "
 		"specified bus\n\n");
 	
 	fprintf(output, "Read Mode Options:\n");
-	fprintf(output, "\t-c\t\tSpecified channel(s) to read from "
+	fprintf(output, "    -c\t\tSpecified channel(s) to read from "
 		"(comma delimited)\n");
-	fprintf(output, "\t-i\t\tContinuously read the ADC at specified "
+	fprintf(output, "    -i\t\tContinuously read the ADC at specified "
 		"interval (seconds)\n");
-	fprintf(output, "\t-n\t\tLimit to specified number of samples\n");
-	fprintf(output, "\t-o csv\t\tSet output format to CSV\n\n");
+	fprintf(output, "    -n\t\tLimit to specified number of samples\n");
+	fprintf(output, "    -o csv\tSet output format to CSV\n\n");
 
 	fprintf(output, "Config Mode Options:\n");
-	fprintf(output, "\t-c\t\tSet channel to read from\n");
-	fprintf(output, "\t-r\t\tSet resolution in bits. Valid values are 12, "
+	fprintf(output, "    -c\t\tSet channel to read from\n");
+	fprintf(output, "    -r\t\tSet resolution in bits. Valid values are 12, "
 		"14, 16, 18\n");
-	fprintf(output, "\t-m\t\tSet operation mode. 1 for continuous or 0 for "
+	fprintf(output, "    -m\t\tSet operation mode. 1 for continuous or 0 for "
 		"one-shot conversion mode\n");
-	fprintf(output, "\t-g\t\tSet channel gain. Valid values are 1, 2, 4, "
+	fprintf(output, "    -g\t\tSet channel gain. Valid values are 1, 2, 4, "
 		"or 8\n");
 }
 
@@ -262,17 +262,18 @@ int parse_channels(const char *arg, uint8_t **parsedchannels)
 {
 	char *s = strdup(arg);
 	char *tok = strtok(s, ",");
-	uint8_t numchannels = 0;
+	int numchannels = 0;
+	char *end;
+
+	if (*parsedchannels == NULL)
+		*parsedchannels = (uint8_t *)malloc(sizeof(uint8_t) * 4);
 
 	while (tok != NULL) {
-		int c = atoi(tok);
-		if ((c > 0) && (c < 5)) {
-			if (*parsedchannels == NULL)
-				*parsedchannels = (uint8_t *)malloc(sizeof(uint8_t) * 4);
+		int c = strtol(tok, &end, 10);
+		if ((c > 0) && (c < 5) && (errno == 0) && (tok != end)) {
 			*(*parsedchannels + numchannels) = (uint8_t)c;
 			numchannels++;
-		}
-		else {
+		} else {
 			numchannels = -1;	
 			if (*parsedchannels != NULL)
 				free(*parsedchannels);
@@ -307,9 +308,12 @@ int main(int argc, char **argv)
 	float readinterval = 0;
 	int maxreadcount = 0;
 	uint8_t *readchannels = NULL;
-	uint8_t numreadchannels = 0;
-	int ch, bus, addr;
+	int numreadchannels = 0;
+	int bus = -1;
+	int addr = -1;
 	bool output_csv = false;
+	int ch;
+	char *end;
 
 	if (argc  < 2) {
 		print_usage(true);
@@ -322,7 +326,14 @@ int main(int argc, char **argv)
 			bus = atoi(optarg);
 			break;
 		case 'a':
-			addr = strtol(optarg, NULL, 16);
+			addr = strtol(optarg, &end, 16);
+			if (((errno != 0) && (addr == 0)) || 
+			     (optarg == end)) {
+				printf("Error: Invalid address '%s' for "
+					"'-a' argument\n", optarg);
+				print_usage(true);
+				exit(EXIT_FAILURE);
+			}
 			break;
 		case 'r':
 			set_config.resolution = atoi(optarg);
@@ -331,13 +342,21 @@ int main(int argc, char **argv)
 		case 'c':
 			if ((numreadchannels = parse_channels(optarg, 
 				&readchannels)) < 0) {
-				printf("Error: Invalid -c argument '%s'\n", optarg);
+				printf("Error: Invalid channel '%s' for "
+					"'-c' argument\n", optarg);
 				print_usage(true);
 				exit(EXIT_FAILURE);
 			}
 			break;
 		case 'm':
-			set_config.mode = atoi(optarg);
+			set_config.mode = strtol(optarg, &end, 10);
+			if (((errno != 0) && (set_config.mode == 0)) || 
+			     (optarg == end)) {
+				printf("Error: Invalid mode '%s' for "
+					"'-m' argument\n", optarg);
+				print_usage(true);
+				exit(EXIT_FAILURE);
+			}
 			configmodeopts = 1;
 			break;
 		case 'g':
@@ -345,18 +364,33 @@ int main(int argc, char **argv)
 			configmodeopts = 1;
 			break;
 		case 'i':
-			readinterval = atof(optarg);
+			readinterval = strtof(optarg, &end);
+			if (((errno != 0) && (readinterval == 0)) || 
+			     (optarg == end)) {
+				printf("Error: Invalid interval '%s' for "
+					"'-i' argument\n", optarg);
+				print_usage(true);
+				exit(EXIT_FAILURE);
+			}
 			readmodeopts = 1;
 			break;
 		case 'n':
-			maxreadcount = atoi(optarg);
+			maxreadcount = strtol(optarg, &end, 10);
+			if (((errno != 0) && (maxreadcount == 0)) || 
+			     (optarg == end)) {
+				printf("Error: Invalid max samples value '%s' "
+					"for '-n' argument\n", optarg);
+				print_usage(true);
+				exit(EXIT_FAILURE);
+			}
 			readmodeopts = 1;
 			break;
 		case 'o': 
 			if (strcmp("csv", optarg) == 0) {
 				output_csv = true;
 			} else {
-				printf("Error: Invalid -o argument '%s'\n", optarg);
+				printf("Error: Invalid '-o' argument '%s'\n", 
+					optarg);
 				exit(EXIT_FAILURE);
 			}	
 			break;
@@ -380,7 +414,26 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	/* Make sure i2c bus and address were specified */
+	/* -b and -a are required parameters*/
+	if ((mode == MODE_CONFIG) || (mode == MODE_READ)) {
+		bool error = false;
+		if (bus == -1) {
+			printf("Error: Missing required parameter "
+				"'-b <i2cbus>'\n");
+			error = true;
+		}
+
+		if (addr == -1) {
+			printf("Error: Missing required parameter "
+				"'-a <address>'\n");
+			error = true;
+		}
+
+		if(error) {
+			print_usage(true);
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	/* -c is an overloaded parameter, check proper plurality
 	 * MODE_CONFIG = channel to set
@@ -388,8 +441,8 @@ int main(int argc, char **argv)
 	 */
 	if (mode == MODE_CONFIG) {
 		if (numreadchannels > 1) {
-			printf("Invalid '-c' argument: You can only specify" 
-				" one channel in 'config' mode");
+			printf("Error: Invalid '-c' argument: You can only " 
+				"specify one channel\n");
 			exit(EXIT_FAILURE);
 		} else if (numreadchannels == 1) {
 			set_config.channel = readchannels[0];
