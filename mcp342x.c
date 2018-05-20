@@ -50,6 +50,11 @@
 #define CONFIG_RES_16BITS	0x02
 #define CONFIG_RES_18BITS	0x03
 
+#define CONFIG_GAIN_1X		0x00
+#define CONFIG_GAIN_2X		0x01
+#define CONFIG_GAIN_4X		0x02
+#define CONFIG_GAIN_8X		0x03
+
 #define GEN_CALL_ADDR		0x00
 #define GEN_CALL_CMD_RESET	0x06
 #define GEN_CALL_CMD_LATCH	0x04
@@ -137,7 +142,22 @@ void mcp342x_print_config(struct mcp342x_config config)
 
 	/* Gain? */
 	char gainstr[3];
-	snprintf(gainstr, sizeof(gainstr), "x%i", config.gain);
+	int gain;
+	switch (config.gain) {
+	case CONFIG_GAIN_1X:
+		gain = 1;
+		break;
+	case CONFIG_GAIN_2X:
+		gain = 2;
+		break;
+	case CONFIG_GAIN_4X:
+		gain = 4;
+		break;
+	case CONFIG_GAIN_8X:
+		gain = 8;
+		break;
+	}
+	snprintf(gainstr, sizeof(gainstr), "x%i", gain);
 	
 	printf("Ready: %s\n", rdystr);
 	printf("Channel: %i\n", config.channel);
@@ -175,7 +195,7 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	config->channel = ((configbits & CONFIG_MASK_CHANNEL) >> 5) + 1;
 	config->mode = (configbits & CONFIG_MASK_CONV_MODE) >> 4;
 	config->resolution = (configbits & CONFIG_MASK_SPS) >> 2;
-	config->gain = (configbits & CONFIG_MASK_GAIN) + 1;
+	config->gain = (configbits & CONFIG_MASK_GAIN);
 
 	/* LSB is mapped to resolution */
 	switch (config->resolution) {
@@ -228,7 +248,7 @@ int mcp342x_write_config(int fd, struct mcp342x_config *config)
 	byte |= (config->channel - 1) << 5;
 	byte |= config->mode << 4;
 	byte |= config->resolution << 2;
-	byte |= config->gain - 1;
+	byte |= config->gain;
 
 	return write(fd, &byte, sizeof(byte));
 }
@@ -284,6 +304,41 @@ int parse_channels(const char *arg, uint8_t **parsedchannels)
 
 	free(s);
 	return numchannels;
+}
+
+void parse_gain(char *optarg, struct mcp342x_config *config) 
+{
+	char *end;
+	int gain = strtol(optarg, &end, 10);
+
+	bool error = false;
+	if (((errno != 0) && (gain == 0)) || 
+	     (optarg == end)) 
+		error = true;
+	
+	switch (gain) {
+	case 1:
+		config->gain = CONFIG_GAIN_1X;
+		break;
+	case 2:
+		config->gain = CONFIG_GAIN_2X;
+		break;
+	case 4:
+		config->gain = CONFIG_GAIN_4X;
+		break;
+	case 8:
+		config->gain = CONFIG_GAIN_8X;
+		break;
+	default:
+		error = true;
+	}
+		
+	if (error) {
+		printf("Error: Invalid gain setting '%s' for "
+			"'-g' argument\n", optarg);
+		print_usage(true);
+		exit(EXIT_FAILURE);
+	}
 }
 
 float default_interval(struct mcp342x_config config)
@@ -360,7 +415,7 @@ int main(int argc, char **argv)
 			configmodeopts = 1;
 			break;
 		case 'g':
-			set_config.gain = atoi(optarg);
+			parse_gain(optarg, &set_config);	
 			configmodeopts = 1;
 			break;
 		case 'i':
