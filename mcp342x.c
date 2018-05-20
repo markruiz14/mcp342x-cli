@@ -320,7 +320,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	while ((ch = getopt(argc, argv, "b:a:r:c:m:g:i:n:o:")) != -1) {
+	while ((ch = getopt(argc, argv, "b:a:r:c:m:g:i:n:o:h")) != -1) {
 		switch (ch) {
 		case 'b':
 			bus = atoi(optarg);
@@ -394,6 +394,9 @@ int main(int argc, char **argv)
 				exit(EXIT_FAILURE);
 			}	
 			break;
+		case 'h':
+			print_usage(false);
+			exit(EXIT_SUCCESS);
 		default:
 			print_usage(true);
 			exit(EXIT_FAILURE);
