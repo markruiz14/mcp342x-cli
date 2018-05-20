@@ -484,7 +484,10 @@ int main(int argc, char **argv)
 
 	/* Read the current config */
 	struct mcp342x_config config = {};
-	mcp342x_read_config(i2cfd, &config);
+	if (mcp342x_read_config(i2cfd, &config) < 0) {
+		perror("Error reading from ADC");
+		exit(EXIT_FAILURE);
+	}
 	
 	if (numreadchannels == 0) {
 		numreadchannels = 1;
@@ -534,7 +537,7 @@ int main(int argc, char **argv)
 					printf(",%f", value);
 				else
 					if (numreadchannels > 1)
-						printf("%i: %f\t", 
+						printf("CH%i: %f\t", 
 							config.channel, 
 							value);
 					else
