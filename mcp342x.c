@@ -42,18 +42,8 @@
 #define CONFIG_MASK_READY	0x80
 #define CONFIG_MASK_CHANNEL	0x60
 #define CONFIG_MASK_CONV_MODE	0x10
-#define CONFIG_MASK_SPS		0x0C
+#define CONFIG_MASK_RES		0x0C
 #define CONFIG_MASK_GAIN	0x03
-
-#define CONFIG_RES_12BITS	0x00
-#define CONFIG_RES_14BITS	0x01
-#define CONFIG_RES_16BITS	0x02
-#define CONFIG_RES_18BITS	0x03
-
-#define CONFIG_GAIN_1X		0x00
-#define CONFIG_GAIN_2X		0x01
-#define CONFIG_GAIN_4X		0x02
-#define CONFIG_GAIN_8X		0x03
 
 #define GEN_CALL_ADDR		0x00
 #define GEN_CALL_CMD_RESET	0x06
@@ -62,21 +52,37 @@
 
 #define get_msb(n, bits) ((1 << (bits - 1)) & n)
 
-struct mcp342x_config {
-	uint8_t ready;
-	uint8_t channel;
-	uint8_t mode;
-	uint8_t resolution;
-	uint8_t gain;
-	uint32_t outputcode;
-	float lsb;
-};
-
 typedef enum {
 	MODE_CONFIG,
 	MODE_READ,
 	MODE_RESET
-} mode;
+} MODE;
+
+enum GAIN {
+	GAIN_1X = 0,
+	GAIN_2X,
+	GAIN_4X,
+	GAIN_8X
+};
+typedef uint8_t GAIN;
+
+enum RES {
+	RES_12BITS = 0,
+	RES_14BITS,
+	RES_16BITS,
+	RES_18BITS
+};
+typedef uint8_t RES;
+
+struct mcp342x_config {
+	uint8_t ready;
+	uint8_t channel;
+	uint8_t mode;
+	RES resolution;
+	GAIN gain;
+	uint32_t outputcode;
+	float lsb;
+};
 
 void print_usage(bool error)
 {
@@ -126,16 +132,16 @@ void mcp342x_print_config(struct mcp342x_config config)
 	/* Sample rate? */
 	uint8_t *spsstr;
 	switch (config.resolution) {
-	case CONFIG_RES_12BITS:
+	case RES_12BITS:
 		spsstr = "240 samples/sec (12 bits)";
 		break;
-	case CONFIG_RES_14BITS:
+	case RES_14BITS:
 		spsstr = "60 samples/sec (14 bits)";
 		break;
-	case CONFIG_RES_16BITS:
+	case RES_16BITS:
 		spsstr = "15 samples/sec (16 bits)";
 		break;
-	case CONFIG_RES_18BITS:
+	case RES_18BITS:
 		spsstr = "3.75 samples/sec (18 bits)";
 		break;
 	}
@@ -144,16 +150,16 @@ void mcp342x_print_config(struct mcp342x_config config)
 	char gainstr[3];
 	int gain;
 	switch (config.gain) {
-	case CONFIG_GAIN_1X:
+	case GAIN_1X:
 		gain = 1;
 		break;
-	case CONFIG_GAIN_2X:
+	case GAIN_2X:
 		gain = 2;
 		break;
-	case CONFIG_GAIN_4X:
+	case GAIN_4X:
 		gain = 4;
 		break;
-	case CONFIG_GAIN_8X:
+	case GAIN_8X:
 		gain = 8;
 		break;
 	}
@@ -194,7 +200,7 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 
 	config->channel = ((configbits & CONFIG_MASK_CHANNEL) >> 5) + 1;
 	config->mode = (configbits & CONFIG_MASK_CONV_MODE) >> 4;
-	config->resolution = (configbits & CONFIG_MASK_SPS) >> 2;
+	config->resolution = (configbits & CONFIG_MASK_RES) >> 2;
 	config->gain = (configbits & CONFIG_MASK_GAIN);
 
 	/* LSB is mapped to resolution */
@@ -214,7 +220,7 @@ int mcp342x_read_config(int fd, struct mcp342x_config *config)
 	}
 
 	/* Save the output code */
-	if (config->resolution == CONFIG_RES_18BITS) 
+	if (config->resolution == RES_18BITS) 
 		config->outputcode = (data[0] << 16) | (data[1] << 8) | data[2];
 	else 
 		config->outputcode = (data[0] << 8) | data[1];
@@ -268,13 +274,13 @@ float mcp342x_get_value(int fd, struct mcp342x_config *config, float delay)
 	int32_t outputcode = data.outputcode;
 
 	/* If MSB is 1, output code is signed. Use 2's complement outputcode */
-	if (((data.resolution == CONFIG_RES_18BITS) && (get_msb(data.outputcode, 18 ))) || 
-	   ((data.resolution <= CONFIG_RES_16BITS) && (get_msb(data.outputcode, 16)))) {
-	   		int nshift = (data.resolution == CONFIG_RES_18BITS) ? 8 : 16;
+	if (((data.resolution == RES_18BITS) && (get_msb(data.outputcode, 18 ))) || 
+	   ((data.resolution <= RES_16BITS) && (get_msb(data.outputcode, 16)))) {
+	   		int nshift = (data.resolution == RES_18BITS) ? 8 : 16;
 	   		uint32_t mask = 0xFFFFFFFF >> nshift;
 	   		outputcode = -((data.outputcode ^ mask) + 1);
 	}
-	
+
 	return (float)outputcode * (data.lsb / (float)data.gain);
 }
 
@@ -318,16 +324,16 @@ void parse_gain_opt(char *optarg, struct mcp342x_config *config)
 	
 	switch (gain) {
 	case 1:
-		config->gain = CONFIG_GAIN_1X;
+		config->gain = GAIN_1X;
 		break;
 	case 2:
-		config->gain = CONFIG_GAIN_2X;
+		config->gain = GAIN_2X;
 		break;
 	case 4:
-		config->gain = CONFIG_GAIN_4X;
+		config->gain = GAIN_4X;
 		break;
 	case 8:
-		config->gain = CONFIG_GAIN_8X;
+		config->gain = GAIN_8X;
 		break;
 	default:
 		error = true;
@@ -353,16 +359,16 @@ void parse_resolution_opt(char *optarg, struct mcp342x_config *config)
 	
 	switch (resolution) {
 	case 12:
-		config->resolution = CONFIG_RES_12BITS;
+		config->resolution = RES_12BITS;
 		break;
 	case 14:
-		config->resolution = CONFIG_RES_14BITS;
+		config->resolution = RES_14BITS;
 		break;
 	case 16:
-		config->resolution = CONFIG_RES_16BITS;
+		config->resolution = RES_16BITS;
 		break;
 	case 18:
-		config->resolution = CONFIG_RES_18BITS;
+		config->resolution = RES_18BITS;
 		break;
 	default:
 		error = true;
@@ -375,23 +381,24 @@ void parse_resolution_opt(char *optarg, struct mcp342x_config *config)
 		exit(EXIT_FAILURE);
 	}
 }
+
 float default_interval(struct mcp342x_config config)
 {
 	switch (config.resolution) {
-	case CONFIG_RES_12BITS:
+	case RES_12BITS:
 		return 1.0 / 240.0;
-	case CONFIG_RES_14BITS:
+	case RES_14BITS:
 		return 1.0 / 60.0;
-	case CONFIG_RES_16BITS:
+	case RES_16BITS:
 		return 1.0 / 15.0;
-	case CONFIG_RES_18BITS:
+	case RES_18BITS:
 		return 1.0 / 3.75;
 	}
 }
 
 int main(int argc, char **argv)
 {
-	mode mode;
+	MODE mode;
 	uint8_t configmodeopts = 0, readmodeopts = 0;
 	struct mcp342x_config set_config = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 	float readinterval = 0;
