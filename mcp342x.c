@@ -306,7 +306,7 @@ int parse_channels(const char *arg, uint8_t **parsedchannels)
 	return numchannels;
 }
 
-void parse_gain(char *optarg, struct mcp342x_config *config) 
+void parse_gain_opt(char *optarg, struct mcp342x_config *config) 
 {
 	char *end;
 	int gain = strtol(optarg, &end, 10);
@@ -341,7 +341,7 @@ void parse_gain(char *optarg, struct mcp342x_config *config)
 	}
 }
 
-void parse_resolution(char *optarg, struct mcp342x_config *config)
+void parse_resolution_opt(char *optarg, struct mcp342x_config *config)
 {
 	char *end;
 	int resolution = strtol(optarg, &end, 10);
@@ -425,7 +425,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case 'r':
-			parse_resolution(optarg, &set_config);
+			parse_resolution_opt(optarg, &set_config);
 			configmodeopts = 1;
 			break;
 		case 'c':
@@ -449,7 +449,7 @@ int main(int argc, char **argv)
 			configmodeopts = 1;
 			break;
 		case 'g':
-			parse_gain(optarg, &set_config);	
+			parse_gain_opt(optarg, &set_config);	
 			configmodeopts = 1;
 			break;
 		case 'i':
