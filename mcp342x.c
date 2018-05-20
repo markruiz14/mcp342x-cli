@@ -108,7 +108,7 @@ void print_usage(bool error)
 	fprintf(output, "Config Mode Options:\n");
 	fprintf(output, "    -c\t\tSet channel to read from\n");
 	fprintf(output, "    -r\t\tSet resolution in bits. Valid values are 12, "
-		"14, 16, 18\n");
+		"14, 16, or 18\n");
 	fprintf(output, "    -m\t\tSet operation mode. 1 for continuous or 0 for "
 		"one-shot conversion mode\n");
 	fprintf(output, "    -g\t\tSet channel gain. Valid values are 1, 2, 4, "
@@ -341,6 +341,40 @@ void parse_gain(char *optarg, struct mcp342x_config *config)
 	}
 }
 
+void parse_resolution(char *optarg, struct mcp342x_config *config)
+{
+	char *end;
+	int resolution = strtol(optarg, &end, 10);
+
+	bool error = false;
+	if (((errno != 0) && (resolution == 0)) || 
+	     (optarg == end)) 
+		error = true;
+	
+	switch (resolution) {
+	case 12:
+		config->resolution = CONFIG_RES_12BITS;
+		break;
+	case 14:
+		config->resolution = CONFIG_RES_14BITS;
+		break;
+	case 16:
+		config->resolution = CONFIG_RES_16BITS;
+		break;
+	case 18:
+		config->resolution = CONFIG_RES_18BITS;
+		break;
+	default:
+		error = true;
+	}
+		
+	if (error) {
+		printf("Error: Invalid resolution setting '%s' for "
+			"'-r' argument\n", optarg);
+		print_usage(true);
+		exit(EXIT_FAILURE);
+	}
+}
 float default_interval(struct mcp342x_config config)
 {
 	switch (config.resolution) {
@@ -391,7 +425,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case 'r':
-			set_config.resolution = atoi(optarg);
+			parse_resolution(optarg, &set_config);
 			configmodeopts = 1;
 			break;
 		case 'c':
