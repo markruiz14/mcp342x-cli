@@ -36,19 +36,19 @@ Gain: x1
 
 ```bash
 # Read currently configured ADC channel
-$ ./mcp342x read -d 1 -a 0x68
+$ ./mcp342x read -b 1 -a 0x68
 CH1: 1.487156
 ```
 
 ```bash 
  # Read ADC channels 1,2,3,4
-$ ./mcp342x read -d 1 -a 0x68 -c 1,2,3,4
+$ ./mcp342x read -b 1 -a 0x68 -c 1,2,3,4
 CH1: 0.674594	CH2: 0.674594	CH3: 0.674594	CH4: 0.674594
 ```
 
 ```bash
 # Sample ADC channel 1,2,3,4 every 0.004 seconds, up to 10 samples. Output CSV.
-$ ./mcp342x read -b 1 -a 0x68 read -i 0.004 -n 10 -o csv
+$ ./mcp342x read -b 1 -a 0x68 -c 1,2,3,4 -i 0.004 -n 10 -o csv
 Sample,CH1,CH2,CH3,CH4
 0,1.864000,1.857000,1.851000,1.846000
 1,1.838000,1.831000,1.826000,1.820000
